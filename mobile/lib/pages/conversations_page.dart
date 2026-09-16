@@ -1,5 +1,10 @@
-import 'package:flutter/material.dart';
+/// Inbox contains conversations created by mutual waves only.
+library;
+
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
+
+import '../core/theme/app_colors.dart';
 import '../models/chat_models.dart';
 import '../services/chat_service.dart';
 import 'chat_detail_page.dart';
@@ -9,192 +14,259 @@ class ConversationsPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final currentUser = FirebaseAuth.instance.currentUser;
-    if (currentUser == null) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      return const Center(child: Text('Sign in to see your inbox.'));
     }
-    final currentUserId = currentUser.uid;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Messages')),
-      body: StreamBuilder<List<Conversation>>(
-        stream: ChatService.instance.watchUserConversations(currentUserId),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-
-          if (snapshot.hasError) {
-            return Center(
-              child: Text('Error loading conversations: ${snapshot.error}'),
-            );
-          }
-
-          final conversations = snapshot.data ?? [];
-
-          if (conversations.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.chat_bubble_outline,
-                    size: 64,
-                    color: Colors.grey[400],
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'No conversations yet',
-                    style: TextStyle(
-                      fontSize: 18,
-                      color: Colors.grey[600],
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Find nearby students to start chatting!',
-                    style: TextStyle(fontSize: 14, color: Colors.grey[500]),
-                  ),
-                ],
-              ),
-            );
-          }
-
-          return ListView.builder(
-            itemCount: conversations.length,
-            itemBuilder: (context, index) {
-              final conversation = conversations[index];
-              return _ConversationTile(
-                conversation: conversation,
-                currentUserId: currentUserId,
+      body: SafeArea(
+        child: StreamBuilder<List<Conversation>>(
+          stream: ChatService.instance.watchUserConversations(user.uid),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            if (snapshot.hasError) {
+              return const _InboxState(
+                title: 'Inbox is taking a moment',
+                message: 'Check your connection, then try again.',
               );
-            },
-          );
-        },
+            }
+
+            final conversations = snapshot.data ?? const <Conversation>[];
+            return CustomScrollView(
+              slivers: [
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(24, 18, 24, 40),
+                  sliver: SliverList(
+                    delegate: SliverChildListDelegate([
+                      Text(
+                        'Inbox',
+                        style: Theme.of(context).textTheme.displaySmall
+                            ?.copyWith(
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: -1.1,
+                            ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Conversations begin after a mutual wave.',
+                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                          color: AppColors.textSecondaryLight,
+                        ),
+                      ),
+                      const SizedBox(height: 32),
+                      if (conversations.isEmpty)
+                        const _InboxState(
+                          title: 'Your conversations will gather here.',
+                          message:
+                              'When you both wave, you’ll have a quiet place to say hello.',
+                        )
+                      else ...[
+                        Text(
+                          'Connections',
+                          style: Theme.of(context).textTheme.titleSmall
+                              ?.copyWith(fontWeight: FontWeight.w600),
+                        ),
+                        const SizedBox(height: 14),
+                        ...conversations.map(
+                          (conversation) => _ConversationRow(
+                            conversation: conversation,
+                            currentUserId: user.uid,
+                          ),
+                        ),
+                      ],
+                    ]),
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
       ),
     );
   }
 }
 
-class _ConversationTile extends StatelessWidget {
-  final Conversation conversation;
-  final String currentUserId;
-
-  const _ConversationTile({
+class _ConversationRow extends StatelessWidget {
+  const _ConversationRow({
     required this.conversation,
     required this.currentUserId,
   });
 
+  final Conversation conversation;
+  final String currentUserId;
+
   @override
   Widget build(BuildContext context) {
-    final otherUserName = conversation.getOtherParticipantName(currentUserId);
-    final otherUserPhoto = conversation.getOtherParticipantPhoto(currentUserId);
-    final unreadCount = conversation.getUnreadCountForUser(currentUserId);
-    final lastMessage = conversation.lastMessage ?? '';
-    final lastMessageTime = conversation.lastMessageTime;
-    final isSentByMe = conversation.lastMessageSenderId == currentUserId;
+    final name = conversation.getOtherParticipantName(currentUserId);
+    final photo = conversation.getOtherParticipantPhoto(currentUserId);
+    final unread = conversation.getUnreadCountForUser(currentUserId);
+    final lastMessage = conversation.lastMessage;
+    final sentByMe = conversation.lastMessageSenderId == currentUserId;
 
-    return ListTile(
-      leading: CircleAvatar(
-        radius: 24,
-        backgroundImage: otherUserPhoto != null
-            ? NetworkImage(otherUserPhoto)
-            : null,
-        child: otherUserPhoto == null
-            ? Text(
-                otherUserName.isNotEmpty ? otherUserName[0].toUpperCase() : '?',
-                style: const TextStyle(fontSize: 20),
-              )
-            : null,
+    return InkWell(
+      borderRadius: BorderRadius.circular(16),
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => ChatDetailPage(
+            conversationId: conversation.id,
+            otherUserId: conversation.getOtherParticipantId(currentUserId),
+            otherUserName: name,
+          ),
+        ),
       ),
-      title: Row(
-        children: [
-          Expanded(
-            child: Text(
-              otherUserName,
-              style: TextStyle(
-                fontWeight: unreadCount > 0
-                    ? FontWeight.bold
-                    : FontWeight.normal,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
+        child: Row(
+          children: [
+            _InboxAvatar(name: name, photoUrl: photo),
+            const SizedBox(width: 13),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.titleSmall
+                              ?.copyWith(
+                                fontWeight: unread > 0
+                                    ? FontWeight.w700
+                                    : FontWeight.w600,
+                              ),
+                        ),
+                      ),
+                      if (conversation.lastMessageTime != null)
+                        Text(
+                          _formatTimestamp(conversation.lastMessageTime!),
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      if (sentByMe && lastMessage != null) ...[
+                        const Icon(
+                          Icons.arrow_upward_rounded,
+                          size: 13,
+                          color: AppColors.textSecondaryLight,
+                        ),
+                        const SizedBox(width: 4),
+                      ],
+                      Expanded(
+                        child: Text(
+                          lastMessage ?? 'Say hello when you’re ready.',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(
+                                color: unread > 0
+                                    ? AppColors.textPrimaryLight
+                                    : AppColors.textSecondaryLight,
+                                fontWeight: unread > 0
+                                    ? FontWeight.w600
+                                    : FontWeight.w400,
+                              ),
+                        ),
+                      ),
+                      if (unread > 0) ...[
+                        const SizedBox(width: 10),
+                        Container(
+                          width: 8,
+                          height: 8,
+                          decoration: const BoxDecoration(
+                            color: AppColors.primary,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ],
               ),
             ),
-          ),
-          if (lastMessageTime != null)
-            Text(
-              _formatTimestamp(lastMessageTime),
-              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-            ),
-        ],
-      ),
-      subtitle: Row(
-        children: [
-          if (isSentByMe) ...[
-            const Icon(Icons.done_all, size: 14, color: Colors.grey),
-            const SizedBox(width: 4),
           ],
-          Expanded(
-            child: Text(
-              lastMessage,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontWeight: unreadCount > 0
-                    ? FontWeight.w600
-                    : FontWeight.normal,
-                color: unreadCount > 0 ? Colors.black87 : Colors.grey[600],
-              ),
-            ),
-          ),
-          if (unreadCount > 0) ...[
-            const SizedBox(width: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: Theme.of(context).primaryColor,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Text(
-                unreadCount.toString(),
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-          ],
-        ],
+        ),
       ),
-      onTap: () {
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => ChatDetailPage(
-              conversationId: conversation.id,
-              otherUserId: conversation.getOtherParticipantId(currentUserId),
-              otherUserName: otherUserName,
-            ),
-          ),
-        );
-      },
     );
   }
 
-  String _formatTimestamp(DateTime dt) {
+  String _formatTimestamp(DateTime timestamp) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    final yesterday = today.subtract(const Duration(days: 1));
-    final messageDate = DateTime(dt.year, dt.month, dt.day);
-
-    if (messageDate == today) {
-      return '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
-    } else if (messageDate == yesterday) {
-      return 'Yesterday';
-    } else if (now.difference(dt).inDays < 7) {
-      const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-      return days[dt.weekday - 1];
-    } else {
-      return '${dt.month}/${dt.day}/${dt.year}';
+    final date = DateTime(timestamp.year, timestamp.month, timestamp.day);
+    if (date == today) {
+      return '${timestamp.hour.toString().padLeft(2, '0')}:${timestamp.minute.toString().padLeft(2, '0')}';
     }
+    if (now.difference(timestamp).inDays < 7) {
+      const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+      return days[timestamp.weekday - 1];
+    }
+    return '${timestamp.month}/${timestamp.day}';
   }
+}
+
+class _InboxAvatar extends StatelessWidget {
+  const _InboxAvatar({required this.name, this.photoUrl});
+  final String name;
+  final String? photoUrl;
+
+  @override
+  Widget build(BuildContext context) => CircleAvatar(
+    radius: 27,
+    backgroundColor: AppColors.surfaceVariantLight,
+    backgroundImage: photoUrl == null || photoUrl!.isEmpty
+        ? null
+        : NetworkImage(photoUrl!),
+    child: photoUrl == null || photoUrl!.isEmpty
+        ? Text(
+            name.isEmpty ? '?' : name.substring(0, 1).toUpperCase(),
+            style: const TextStyle(
+              color: AppColors.secondary,
+              fontWeight: FontWeight.w600,
+            ),
+          )
+        : null,
+  );
+}
+
+class _InboxState extends StatelessWidget {
+  const _InboxState({required this.title, required this.message});
+  final String title;
+  final String message;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(top: 64),
+    child: Column(
+      children: [
+        Icon(
+          Icons.chat_bubble_outline,
+          size: 38,
+          color: AppColors.textSecondaryLight,
+        ),
+        const SizedBox(height: 16),
+        Text(
+          title,
+          textAlign: TextAlign.center,
+          style: Theme.of(context).textTheme.titleMedium,
+        ),
+        const SizedBox(height: 8),
+        Text(
+          message,
+          textAlign: TextAlign.center,
+          style: Theme.of(
+            context,
+          ).textTheme.bodyMedium?.copyWith(color: AppColors.textSecondaryLight),
+        ),
+      ],
+    ),
+  );
 }
