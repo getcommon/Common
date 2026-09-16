@@ -41,50 +41,76 @@ class _HomePageState extends State<HomePage> {
           body: SafeArea(
             child: viewer == null
                 ? const Center(child: CircularProgressIndicator())
-                : StreamBuilder<List<ProximityMatch>>(
-                    stream: ProximityService.instance.watchNearbyMatches(
-                      viewer,
+                : StreamBuilder<int>(
+                    stream: WaveService.instance.watchWavesSentToday(
+                      viewer.uid,
                     ),
-                    builder: (context, matchesSnapshot) {
-                      final profile = _discoverProfileFor(matchesSnapshot.data);
-                      return CustomScrollView(
-                        slivers: [
-                          SliverPadding(
-                            padding: const EdgeInsets.fromLTRB(24, 18, 24, 40),
-                            sliver: SliverList(
-                              delegate: SliverChildListDelegate([
-                                const _DiscoverHeader(),
-                                const SizedBox(height: 30),
-                                if (profile != null)
-                                  _PublicProfile(
-                                    profile: profile,
-                                    waveSent: _waveSent,
-                                    isSending: _isSendingWave,
-                                    onWave:
-                                        profile.profile.uid ==
-                                            erenDiscoverProfile.profile.uid
-                                        ? null
-                                        : () => _sendWave(viewer, profile),
-                                  )
-                                else if (matchesSnapshot.hasError)
-                                  const _DiscoverState(
-                                    title: 'Discover is taking a moment',
-                                    message:
-                                        'Check your connection, then try again.',
-                                  )
-                                else if (matchesSnapshot.connectionState ==
-                                    ConnectionState.waiting)
-                                  const _DiscoverLoading()
-                                else
-                                  const _DiscoverState(
-                                    title: 'Nothing new nearby yet',
-                                    message:
-                                        'We’ll only introduce people when there’s meaningful common ground.',
-                                  ),
-                              ]),
-                            ),
-                          ),
-                        ],
+                    builder: (context, wavesSnapshot) {
+                      final wavesRemaining =
+                          WaveService.dailyWaveLimit -
+                          (wavesSnapshot.data ?? 0);
+                      return StreamBuilder<List<ProximityMatch>>(
+                        stream: ProximityService.instance.watchNearbyMatches(
+                          viewer,
+                        ),
+                        builder: (context, matchesSnapshot) {
+                          final profile = _discoverProfileFor(
+                            matchesSnapshot.data,
+                          );
+                          return CustomScrollView(
+                            slivers: [
+                              SliverPadding(
+                                padding: const EdgeInsets.fromLTRB(
+                                  24,
+                                  18,
+                                  24,
+                                  40,
+                                ),
+                                sliver: SliverList(
+                                  delegate: SliverChildListDelegate([
+                                    const _DiscoverHeader(),
+                                    const SizedBox(height: 30),
+                                    if (profile != null)
+                                      _PublicProfile(
+                                        profile: profile,
+                                        wavesRemaining: wavesRemaining
+                                            .clamp(
+                                              0,
+                                              WaveService.dailyWaveLimit,
+                                            )
+                                            .toInt(),
+                                        waveSent: _waveSent,
+                                        isSending: _isSendingWave,
+                                        onWave:
+                                            profile.profile.uid ==
+                                                    erenDiscoverProfile
+                                                        .profile
+                                                        .uid ||
+                                                wavesRemaining <= 0
+                                            ? null
+                                            : () => _sendWave(viewer, profile),
+                                      )
+                                    else if (matchesSnapshot.hasError)
+                                      const _DiscoverState(
+                                        title: 'Discover is taking a moment',
+                                        message:
+                                            'Check your connection, then try again.',
+                                      )
+                                    else if (matchesSnapshot.connectionState ==
+                                        ConnectionState.waiting)
+                                      const _DiscoverLoading()
+                                    else
+                                      const _DiscoverState(
+                                        title: 'Nothing new nearby yet',
+                                        message:
+                                            'We’ll only introduce people when there’s meaningful common ground.',
+                                      ),
+                                  ]),
+                                ),
+                              ),
+                            ],
+                          );
+                        },
                       );
                     },
                   ),
@@ -106,33 +132,51 @@ class _HomePageState extends State<HomePage> {
     if (_isSendingWave || _waveSent) return;
     setState(() => _isSendingWave = true);
 
-    final id = await WaveService.instance.sendWave(
-      senderId: sender.uid,
-      receiverId: recipient.profile.uid,
-      senderProfile: {
-        'displayName': sender.displayName,
-        'photoUrl': sender.photoUrl,
-      },
-      receiverProfile: {
-        'displayName': recipient.profile.displayName,
-        'photoUrl': recipient.profile.photoUrl,
-      },
-    );
+    try {
+      final id = await WaveService.instance.sendWave(
+        senderId: sender.uid,
+        receiverId: recipient.profile.uid,
+        senderProfile: {
+          'displayName': sender.displayName,
+          'photoUrl': sender.photoUrl,
+        },
+        receiverProfile: {
+          'displayName': recipient.profile.displayName,
+          'photoUrl': recipient.profile.photoUrl,
+        },
+      );
 
-    if (!mounted) return;
-    setState(() {
-      _isSendingWave = false;
-      _waveSent = id != null;
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          id == null
-              ? 'You already waved to ${recipient.profile.displayName}.'
-              : 'Wave sent to ${recipient.profile.displayName}.',
+      if (!mounted) return;
+      setState(() {
+        _isSendingWave = false;
+        _waveSent = id != null;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            id == null
+                ? 'You already waved to ${recipient.profile.displayName}.'
+                : 'Wave sent to ${recipient.profile.displayName}.',
+          ),
         ),
-      ),
-    );
+      );
+    } on StateError {
+      if (!mounted) return;
+      setState(() => _isSendingWave = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('You’ve used today’s waves. Try again tomorrow.'),
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _isSendingWave = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('That wave could not be sent. Try again.'),
+        ),
+      );
+    }
   }
 }
 
@@ -205,12 +249,14 @@ class _PresenceMark extends StatelessWidget {
 class _PublicProfile extends StatelessWidget {
   const _PublicProfile({
     required this.profile,
+    required this.wavesRemaining,
     required this.waveSent,
     required this.isSending,
     required this.onWave,
   });
 
   final DiscoverProfile profile;
+  final int wavesRemaining;
   final bool waveSent;
   final bool isSending;
   final VoidCallback? onWave;
@@ -326,7 +372,13 @@ class _PublicProfile extends StatelessWidget {
                     waveSent ? Icons.check_rounded : Icons.waving_hand_outlined,
                     size: 18,
                   ),
-            label: Text(waveSent ? 'Wave sent' : 'Wave'),
+            label: Text(
+              waveSent
+                  ? 'Wave sent'
+                  : wavesRemaining == 0
+                  ? 'Waves used for today'
+                  : 'Wave',
+            ),
             style: OutlinedButton.styleFrom(
               foregroundColor: waveSent
                   ? AppColors.textSecondaryLight
@@ -343,7 +395,9 @@ class _PublicProfile extends StatelessWidget {
         ),
         const SizedBox(height: 14),
         Text(
-          'A wave is a simple hello. Messaging opens only if it’s mutual.',
+          waveSent
+              ? 'A simple hello is on its way.'
+              : '$wavesRemaining of ${WaveService.dailyWaveLimit} waves left today. Messaging opens only if it’s mutual.',
           style: Theme.of(
             context,
           ).textTheme.bodySmall?.copyWith(color: AppColors.textSecondaryLight),

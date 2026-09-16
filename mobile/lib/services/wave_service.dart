@@ -7,6 +7,10 @@ class WaveService {
   WaveService._();
   static final instance = WaveService._();
 
+  /// Starting limit from the product brief. Keep this here so the UI and the
+  /// write path use the same rule while the final limit is still tunable.
+  static const int dailyWaveLimit = 3;
+
   final _db = FirebaseFirestore.instance;
 
   /// Send a wave to another user
@@ -19,6 +23,10 @@ class WaveService {
     required Map<String, dynamic> receiverProfile,
   }) async {
     try {
+      if (await wavesSentToday(senderId) >= dailyWaveLimit) {
+        throw StateError('Daily wave limit reached');
+      }
+
       // Check if wave already exists (in either direction)
       final existingWave = await _checkExistingWave(senderId, receiverId);
       if (existingWave != null) {
@@ -46,6 +54,41 @@ class WaveService {
       debugPrint('Error sending wave: $e');
       return null;
     }
+  }
+
+  /// Watches every wave created by this person since their local day began.
+  /// Accepted and declined waves still count: the limit is on sends, not
+  /// outstanding requests.
+  Stream<int> watchWavesSentToday(String userId) {
+    final startOfToday = _startOfToday();
+    return _db
+        .collection('waves')
+        .where('senderId', isEqualTo: userId)
+        .where(
+          'timestamp',
+          isGreaterThanOrEqualTo: Timestamp.fromDate(startOfToday),
+        )
+        .orderBy('timestamp', descending: true)
+        .snapshots()
+        .map((snapshot) => snapshot.docs.length);
+  }
+
+  Future<int> wavesSentToday(String userId) async {
+    final snapshot = await _db
+        .collection('waves')
+        .where('senderId', isEqualTo: userId)
+        .where(
+          'timestamp',
+          isGreaterThanOrEqualTo: Timestamp.fromDate(_startOfToday()),
+        )
+        .orderBy('timestamp', descending: true)
+        .get();
+    return snapshot.docs.length;
+  }
+
+  DateTime _startOfToday() {
+    final now = DateTime.now();
+    return DateTime(now.year, now.month, now.day);
   }
 
   /// Accept an incoming wave
