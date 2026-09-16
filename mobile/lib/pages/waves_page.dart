@@ -1,20 +1,13 @@
-/// Waves Page - Manage wave requests and see mutual matches
-///
-/// Shows:
-/// - Incoming waves (people who waved at you)
-/// - Outgoing waves (people you waved at)
-/// - Mutual matches (both waved)
+/// Activity collects only meaningful connection updates: incoming waves and
+/// mutual connections. Sent waves stay intentionally quiet on Discover.
 library;
 
-import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../core/theme/app_spacing.dart';
+import 'package:flutter/material.dart';
+
 import '../core/theme/app_colors.dart';
-import '../core/widgets/app_card.dart';
-import '../core/widgets/empty_state.dart';
-import '../core/widgets/loading_indicator.dart';
-import '../services/wave_service.dart';
 import '../models/wave_models.dart';
+import '../services/wave_service.dart';
 import '../utils/chat_utils.dart';
 
 class WavesPage extends StatelessWidget {
@@ -24,210 +17,128 @@ class WavesPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
-      return const Center(child: Text('Not logged in'));
+      return const Center(child: Text('Sign in to see your activity.'));
     }
 
-    return DefaultTabController(
-      length: 3,
-      child: Scaffold(
-        appBar: AppBar(
-          title: const Text('Waves'),
-          bottom: TabBar(
-            tabs: [
-              _CountTab<WaveRequest>(
-                label: 'Received',
-                icon: Icons.inbox,
-                stream: WaveService.instance.watchIncomingWaves(user.uid),
-              ),
-              _CountTab<WaveRequest>(
-                label: 'Sent',
-                icon: Icons.send,
-                stream: WaveService.instance.watchOutgoingWaves(user.uid),
-              ),
-              _CountTab<MutualMatch>(
-                label: 'Matched',
-                icon: Icons.handshake,
-                stream: WaveService.instance.watchMutualMatches(user.uid),
-              ),
-            ],
-          ),
-        ),
-        body: TabBarView(
-          children: [
-            _IncomingWavesTab(userId: user.uid),
-            _OutgoingWavesTab(userId: user.uid),
-            _MutualMatchesTab(userId: user.uid),
-          ],
-        ),
-      ),
-    );
-  }
-}
+    return Scaffold(
+      body: SafeArea(
+        child: StreamBuilder<List<WaveRequest>>(
+          stream: WaveService.instance.watchIncomingWaves(user.uid),
+          builder: (context, wavesSnapshot) {
+            return StreamBuilder<List<MutualMatch>>(
+              stream: WaveService.instance.watchMutualMatches(user.uid),
+              builder: (context, matchesSnapshot) {
+                if (wavesSnapshot.connectionState == ConnectionState.waiting ||
+                    matchesSnapshot.connectionState ==
+                        ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
 
-/// Tab that shows a live count next to the label based on a stream of items
-class _CountTab<T> extends StatelessWidget {
-  const _CountTab({
-    required this.label,
-    required this.icon,
-    required this.stream,
-  });
-
-  final String label;
-  final IconData icon;
-  final Stream<List<T>> stream;
-
-  @override
-  Widget build(BuildContext context) {
-    return StreamBuilder<List<T>>(
-      stream: stream,
-      builder: (context, snapshot) {
-        final count = snapshot.data?.length ?? 0;
-        final text = count > 0 ? '$label ($count)' : label;
-        return Tab(
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, size: 20),
-              const SizedBox(width: 4),
-              Text(text),
-            ],
-          ),
-        );
-      },
-    );
-  }
-}
-
-/// Tab showing incoming waves (waves received from others)
-class _IncomingWavesTab extends StatelessWidget {
-  const _IncomingWavesTab({required this.userId});
-
-  final String userId;
-
-  @override
-  Widget build(BuildContext context) {
-    return StreamBuilder<List<WaveRequest>>(
-      stream: WaveService.instance.watchIncomingWaves(userId),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const LoadingIndicator(message: 'Loading waves...');
-        }
-
-        if (snapshot.hasError) {
-          return Center(child: Text('Error: ${snapshot.error}'));
-        }
-
-        final waves = snapshot.data ?? [];
-
-        if (waves.isEmpty) {
-          return const EmptyState(
-            icon: Icons.back_hand_outlined,
-            title: 'No waves yet',
-            message: 'When someone waves at you, they\'ll appear here!',
-          );
-        }
-
-        return ListView.builder(
-          padding: AppSpacing.screenPadding,
-          itemCount: waves.length,
-          itemBuilder: (context, index) {
-            final wave = waves[index];
-            return _buildIncomingWaveCard(context, wave);
+                final waves = wavesSnapshot.data ?? const <WaveRequest>[];
+                final matches = matchesSnapshot.data ?? const <MutualMatch>[];
+                return CustomScrollView(
+                  slivers: [
+                    SliverPadding(
+                      padding: const EdgeInsets.fromLTRB(24, 18, 24, 40),
+                      sliver: SliverList(
+                        delegate: SliverChildListDelegate([
+                          Text(
+                            'Activity',
+                            style: Theme.of(context).textTheme.displaySmall
+                                ?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                  letterSpacing: -1.1,
+                                ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            'The people you’ve made a little room for.',
+                            style: Theme.of(context).textTheme.bodyLarge
+                                ?.copyWith(color: AppColors.textSecondaryLight),
+                          ),
+                          const SizedBox(height: 32),
+                          if (matches.isNotEmpty) ...[
+                            const _SectionHeading('Connections'),
+                            const SizedBox(height: 12),
+                            ...matches.map(
+                              (match) => _ConnectionRow(
+                                match: match,
+                                currentUserId: user.uid,
+                              ),
+                            ),
+                            const SizedBox(height: 30),
+                          ],
+                          if (waves.isNotEmpty) ...[
+                            const _SectionHeading('Waves for you'),
+                            const SizedBox(height: 12),
+                            ...waves.map(
+                              (wave) => _IncomingWaveRow(
+                                wave: wave,
+                                onAccept: () => _acceptWave(context, wave),
+                                onDecline: () => _declineWave(context, wave),
+                              ),
+                            ),
+                          ],
+                          if (matches.isEmpty && waves.isEmpty)
+                            const _ActivityEmptyState(),
+                        ]),
+                      ),
+                    ),
+                  ],
+                );
+              },
+            );
           },
-        );
-      },
+        ),
+      ),
     );
   }
 
-  Widget _buildIncomingWaveCard(BuildContext context, WaveRequest wave) {
-    final senderName =
-        wave.senderProfile['displayName'] as String? ?? 'Someone';
-    final senderPhoto = wave.senderProfile['photoUrl'] as String?;
-
-    return AppCard(
-      margin: const EdgeInsets.only(bottom: AppSpacing.sm),
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.md),
-        child: Row(
+  Future<void> _acceptWave(BuildContext context, WaveRequest wave) async {
+    final matchId = await WaveService.instance.acceptWave(wave.id);
+    if (!context.mounted || matchId == null) return;
+    final name = wave.senderProfile['displayName'] as String? ?? 'them';
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => Padding(
+        padding: const EdgeInsets.fromLTRB(24, 8, 24, 30),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Avatar
-            CircleAvatar(
-              radius: 28,
-              backgroundImage: senderPhoto != null
-                  ? NetworkImage(senderPhoto)
-                  : null,
-              child: senderPhoto == null
-                  ? const Icon(Icons.person, size: 28)
-                  : null,
+            Text(
+              'You and $name are connected.',
+              style: Theme.of(
+                sheetContext,
+              ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w600),
             ),
-            const SizedBox(width: AppSpacing.md),
-
-            // Info
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '$senderName waved at you!',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    wave.timeAgo,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: AppColors.textSecondaryLight,
-                    ),
-                  ),
-                ],
+            const SizedBox(height: 10),
+            Text(
+              'Start with a simple hello whenever it feels right.',
+              style: Theme.of(sheetContext).textTheme.bodyLarge?.copyWith(
+                color: AppColors.textSecondaryLight,
               ),
             ),
-
-            // Actions
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Accept button
-                IconButton(
-                  onPressed: () async {
-                    final matchId = await WaveService.instance.acceptWave(
-                      wave.id,
-                    );
-                    if (matchId != null && context.mounted) {
-                      // Show celebration modal!
-                      await _showMatchCelebration(
-                        context,
-                        senderName,
-                        senderPhoto,
-                        wave.senderId,
-                      );
-                    }
-                  },
-                  icon: const Icon(Icons.check_circle),
-                  color: AppColors.success,
-                  tooltip: 'Wave back',
+            const SizedBox(height: 24),
+            OutlinedButton.icon(
+              onPressed: () async {
+                Navigator.of(sheetContext).pop();
+                await ChatUtils.startConversationWith(context, wave.senderId);
+              },
+              icon: const Icon(Icons.chat_bubble_outline, size: 18),
+              label: const Text('Start conversation'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.primary,
+                side: const BorderSide(color: AppColors.primary),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 18,
+                  vertical: 12,
                 ),
-
-                // Decline button
-                IconButton(
-                  onPressed: () async {
-                    final success = await WaveService.instance.declineWave(
-                      wave.id,
-                    );
-                    if (success && context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Wave declined')),
-                      );
-                    }
-                  },
-                  icon: const Icon(Icons.close),
-                  color: AppColors.error,
-                  tooltip: 'Decline',
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(24),
                 ),
-              ],
+              ),
             ),
           ],
         ),
@@ -235,449 +146,204 @@ class _IncomingWavesTab extends StatelessWidget {
     );
   }
 
-  /// Show "It's a Match!" celebration modal
-  Future<void> _showMatchCelebration(
-    BuildContext context,
-    String matchName,
-    String? matchPhoto,
-    String matchUserId,
-  ) async {
-    await showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => _MatchCelebrationDialog(
-        matchName: matchName,
-        matchPhoto: matchPhoto,
-        matchUserId: matchUserId,
-      ),
+  Future<void> _declineWave(BuildContext context, WaveRequest wave) async {
+    final declined = await WaveService.instance.declineWave(wave.id);
+    if (!context.mounted || !declined) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Wave removed from your activity.')),
     );
   }
 }
 
-/// Animated celebration dialog for mutual matches
-class _MatchCelebrationDialog extends StatefulWidget {
-  const _MatchCelebrationDialog({
-    required this.matchName,
-    required this.matchPhoto,
-    required this.matchUserId,
+class _SectionHeading extends StatelessWidget {
+  const _SectionHeading(this.label);
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => Text(
+    label,
+    style: Theme.of(
+      context,
+    ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+  );
+}
+
+class _IncomingWaveRow extends StatelessWidget {
+  const _IncomingWaveRow({
+    required this.wave,
+    required this.onAccept,
+    required this.onDecline,
   });
 
-  final String matchName;
-  final String? matchPhoto;
-  final String matchUserId;
-
-  @override
-  State<_MatchCelebrationDialog> createState() =>
-      _MatchCelebrationDialogState();
-}
-
-class _MatchCelebrationDialogState extends State<_MatchCelebrationDialog>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _scaleAnimation;
-  late Animation<double> _fadeAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      duration: const Duration(milliseconds: 600),
-      vsync: this,
-    );
-
-    _scaleAnimation = CurvedAnimation(
-      parent: _controller,
-      curve: Curves.elasticOut,
-    );
-
-    _fadeAnimation = CurvedAnimation(parent: _controller, curve: Curves.easeIn);
-
-    _controller.forward();
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
+  final WaveRequest wave;
+  final VoidCallback onAccept;
+  final VoidCallback onDecline;
 
   @override
   Widget build(BuildContext context) {
-    return FadeTransition(
-      opacity: _fadeAnimation,
-      child: ScaleTransition(
-        scale: _scaleAnimation,
-        child: Dialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(AppSpacing.lg),
+    final name = wave.senderProfile['displayName'] as String? ?? 'Someone';
+    final photo = wave.senderProfile['photoUrl'] as String?;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 20),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _ActivityAvatar(name: name, photoUrl: photo),
+          const SizedBox(width: 13),
+          Expanded(
             child: Column(
-              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Animated heart icon
-                TweenAnimationBuilder<double>(
-                  tween: Tween(begin: 0.0, end: 1.0),
-                  duration: const Duration(milliseconds: 800),
-                  curve: Curves.elasticOut,
-                  builder: (context, value, child) {
-                    return Transform.scale(
-                      scale: value,
-                      child: const Icon(
-                        Icons.handshake,
-                        size: 64,
-                        color: AppColors.success,
-                      ),
-                    );
-                  },
-                ),
-                const SizedBox(height: AppSpacing.md),
-
-                // Title
                 Text(
-                  "It's a Match!",
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.primary,
-                  ),
+                  '$name waved to you',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
                 ),
-                const SizedBox(height: AppSpacing.sm),
-
-                // Subtitle
+                const SizedBox(height: 3),
                 Text(
-                  'You and ${widget.matchName} liked each other!',
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.bodyLarge,
+                  wave.timeAgo,
+                  style: Theme.of(context).textTheme.bodySmall,
                 ),
-                const SizedBox(height: AppSpacing.lg),
-
-                // Profile photo with animation
-                TweenAnimationBuilder<double>(
-                  tween: Tween(begin: 0.0, end: 1.0),
-                  duration: const Duration(milliseconds: 600),
-                  curve: Curves.easeOut,
-                  builder: (context, value, child) {
-                    return Transform.scale(
-                      scale: value,
-                      child: CircleAvatar(
-                        radius: 50,
-                        backgroundImage: widget.matchPhoto != null
-                            ? NetworkImage(widget.matchPhoto!)
-                            : null,
-                        child: widget.matchPhoto == null
-                            ? const Icon(Icons.person, size: 50)
-                            : null,
-                      ),
-                    );
-                  },
-                ),
-                const SizedBox(height: AppSpacing.lg),
-
-                // Actions
-                Column(
+                const SizedBox(height: 12),
+                Row(
                   children: [
-                    // Send message button
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: () async {
-                          Navigator.of(context).pop();
-                          await ChatUtils.startConversationWith(
-                            context,
-                            widget.matchUserId,
-                          );
-                        },
-                        icon: const Icon(Icons.chat_bubble),
-                        label: const Text('Send Message'),
-                        style: ElevatedButton.styleFrom(
-                          padding: const EdgeInsets.all(AppSpacing.md),
-                          backgroundColor: AppColors.primary,
-                          foregroundColor: Colors.white,
+                    OutlinedButton(
+                      onPressed: onAccept,
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.primary,
+                        side: const BorderSide(color: AppColors.primary),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 9,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
                         ),
                       ),
+                      child: const Text('Wave back'),
                     ),
-                    const SizedBox(height: AppSpacing.sm),
-
-                    // Keep browsing button
-                    SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton(
-                        onPressed: () {
-                          Navigator.of(context).pop();
-                        },
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.all(AppSpacing.md),
-                        ),
-                        child: const Text('Keep Browsing'),
+                    const SizedBox(width: 8),
+                    TextButton(
+                      onPressed: onDecline,
+                      style: TextButton.styleFrom(
+                        foregroundColor: AppColors.textSecondaryLight,
                       ),
+                      child: const Text('Not now'),
                     ),
                   ],
                 ),
               ],
             ),
           ),
-        ),
+        ],
       ),
     );
   }
 }
 
-/// Tab showing outgoing waves (waves sent to others)
-class _OutgoingWavesTab extends StatelessWidget {
-  const _OutgoingWavesTab({required this.userId});
-
-  final String userId;
+class _ConnectionRow extends StatelessWidget {
+  const _ConnectionRow({required this.match, required this.currentUserId});
+  final MutualMatch match;
+  final String currentUserId;
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<List<WaveRequest>>(
-      stream: WaveService.instance.watchOutgoingWaves(userId),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const LoadingIndicator(message: 'Loading waves...');
-        }
-
-        if (snapshot.hasError) {
-          return Center(child: Text('Error: ${snapshot.error}'));
-        }
-
-        final waves = snapshot.data ?? [];
-
-        if (waves.isEmpty) {
-          return const EmptyState(
-            icon: Icons.back_hand_outlined,
-            title: 'No waves sent',
-            message: 'Wave at someone from the home page to connect!',
-          );
-        }
-
-        return ListView.builder(
-          padding: AppSpacing.screenPadding,
-          itemCount: waves.length,
-          itemBuilder: (context, index) {
-            final wave = waves[index];
-            return _buildOutgoingWaveCard(context, wave);
-          },
-        );
-      },
-    );
-  }
-
-  Widget _buildOutgoingWaveCard(BuildContext context, WaveRequest wave) {
-    final receiverName =
-        wave.receiverProfile['displayName'] as String? ?? 'Someone';
-    final receiverPhoto = wave.receiverProfile['photoUrl'] as String?;
-
-    return AppCard(
-      margin: const EdgeInsets.only(bottom: AppSpacing.sm),
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.md),
-        child: Row(
-          children: [
-            // Avatar
-            CircleAvatar(
-              radius: 28,
-              backgroundImage: receiverPhoto != null
-                  ? NetworkImage(receiverPhoto)
-                  : null,
-              child: receiverPhoto == null
-                  ? const Icon(Icons.person, size: 28)
-                  : null,
+    final profile = match.getOtherUserProfile(currentUserId);
+    final name = profile['displayName'] as String? ?? 'Someone';
+    final photo = profile['photoUrl'] as String?;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 20),
+      child: Row(
+        children: [
+          _ActivityAvatar(name: name, photoUrl: photo),
+          const SizedBox(width: 13),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Connected with $name',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  'You can message each other now.',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
             ),
-            const SizedBox(width: AppSpacing.md),
-
-            // Info
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'You waved at $receiverName',
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Sent ${wave.timeAgo} • Waiting for response',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: AppColors.textSecondaryLight,
-                    ),
-                  ),
-                ],
-              ),
+          ),
+          IconButton(
+            onPressed: () => ChatUtils.startConversationWith(
+              context,
+              match.getOtherUserId(currentUserId),
             ),
-
-            // Cancel button
-            IconButton(
-              onPressed: () async {
-                // Show confirmation dialog
-                final confirm = await showDialog<bool>(
-                  context: context,
-                  builder: (context) => AlertDialog(
-                    title: const Text('Cancel wave?'),
-                    content: Text('Remove your wave to $receiverName?'),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.of(context).pop(false),
-                        child: const Text('Keep'),
-                      ),
-                      TextButton(
-                        onPressed: () => Navigator.of(context).pop(true),
-                        child: const Text('Cancel'),
-                      ),
-                    ],
-                  ),
-                );
-
-                if (confirm == true) {
-                  final success = await WaveService.instance.cancelWave(
-                    wave.id,
-                  );
-                  if (success && context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Wave cancelled')),
-                    );
-                  }
-                }
-              },
-              icon: const Icon(Icons.delete_outline),
-              color: AppColors.textSecondaryLight,
-              tooltip: 'Cancel wave',
-            ),
-          ],
-        ),
+            icon: const Icon(Icons.chat_bubble_outline),
+            color: AppColors.primary,
+            tooltip: 'Start conversation',
+          ),
+        ],
       ),
     );
   }
 }
 
-/// Tab showing mutual matches (both users waved)
-class _MutualMatchesTab extends StatelessWidget {
-  const _MutualMatchesTab({required this.userId});
-
-  final String userId;
+class _ActivityAvatar extends StatelessWidget {
+  const _ActivityAvatar({required this.name, this.photoUrl});
+  final String name;
+  final String? photoUrl;
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<List<MutualMatch>>(
-      stream: WaveService.instance.watchMutualMatches(userId),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const LoadingIndicator(message: 'Loading matches...');
-        }
-
-        if (snapshot.hasError) {
-          return Center(child: Text('Error: ${snapshot.error}'));
-        }
-
-        final matches = snapshot.data ?? [];
-
-        if (matches.isEmpty) {
-          return const EmptyState(
-            icon: Icons.handshake_outlined,
-            title: 'No matches yet',
-            message:
-                'When you both wave at each other, you\'ll match and can start chatting!',
-          );
-        }
-
-        return ListView.builder(
-          padding: AppSpacing.screenPadding,
-          itemCount: matches.length,
-          itemBuilder: (context, index) {
-            final match = matches[index];
-            return _buildMatchCard(context, match, userId);
-          },
-        );
-      },
+    return CircleAvatar(
+      radius: 26,
+      backgroundColor: AppColors.surfaceVariantLight,
+      backgroundImage: photoUrl == null || photoUrl!.isEmpty
+          ? null
+          : NetworkImage(photoUrl!),
+      child: photoUrl == null || photoUrl!.isEmpty
+          ? Text(
+              name.substring(0, 1).toUpperCase(),
+              style: const TextStyle(
+                color: AppColors.secondary,
+                fontWeight: FontWeight.w600,
+              ),
+            )
+          : null,
     );
   }
+}
 
-  Widget _buildMatchCard(
-    BuildContext context,
-    MutualMatch match,
-    String currentUserId,
-  ) {
-    final otherProfile = match.getOtherUserProfile(currentUserId);
-    final otherName = otherProfile['displayName'] as String? ?? 'Someone';
-    final otherPhoto = otherProfile['photoUrl'] as String?;
-    final otherUserId = match.getOtherUserId(currentUserId);
+class _ActivityEmptyState extends StatelessWidget {
+  const _ActivityEmptyState();
 
-    return AppCard(
-      margin: const EdgeInsets.only(bottom: AppSpacing.sm),
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.md),
-        child: Row(
-          children: [
-            // Avatar
-            CircleAvatar(
-              radius: 28,
-              backgroundImage: otherPhoto != null
-                  ? NetworkImage(otherPhoto)
-                  : null,
-              child: otherPhoto == null
-                  ? const Icon(Icons.person, size: 28)
-                  : null,
-            ),
-            const SizedBox(width: AppSpacing.md),
-
-            // Info
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      const Icon(
-                        Icons.handshake,
-                        size: 16,
-                        color: AppColors.success,
-                      ),
-                      const SizedBox(width: 4),
-                      Expanded(
-                        child: Text(
-                          'Matched with $otherName',
-                          maxLines: 1,
-                          softWrap: false,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.titleSmall
-                              ?.copyWith(fontWeight: FontWeight.w600),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'You can now message each other',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: AppColors.textSecondaryLight,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            // Chat button
-            SizedBox(
-              width: 40,
-              height: 40,
-              child: IconButton(
-                visualDensity: VisualDensity.compact,
-                onPressed: () async {
-                  await ChatUtils.startConversationWith(context, otherUserId);
-                },
-                icon: const Icon(Icons.chat_bubble),
-                color: AppColors.primary,
-                tooltip: 'Start chat',
-              ),
-            ),
-          ],
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(top: 88),
+    child: Column(
+      children: [
+        Icon(
+          Icons.waving_hand_outlined,
+          size: 38,
+          color: AppColors.textSecondaryLight,
         ),
-      ),
-    );
-  }
+        const SizedBox(height: 16),
+        Text(
+          'A quiet start is still a start.',
+          style: Theme.of(context).textTheme.titleMedium,
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'When someone waves back—or reaches out—you’ll see it here.',
+          textAlign: TextAlign.center,
+          style: Theme.of(
+            context,
+          ).textTheme.bodyMedium?.copyWith(color: AppColors.textSecondaryLight),
+        ),
+      ],
+    ),
+  );
 }
