@@ -1,12 +1,12 @@
-# mobile
+# Common mobile app
 
-A new Flutter project.!!
+The Flutter implementation of Common, a friendship-first local discovery app.
+
+For the current implementation state, product-aligned decisions, verification commands, and next steps, see [IMPLEMENTATION_STATUS.md](../IMPLEMENTATION_STATUS.md) and [PRODUCT_BRIEF.md](../PRODUCT_BRIEF.md).
 
 ## Getting Started
 
-This project is a starting point for a Flutter application.
-
-A few resources to get you started if this is your first Flutter project:
+Useful Flutter resources:
 
 - [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
 - [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
