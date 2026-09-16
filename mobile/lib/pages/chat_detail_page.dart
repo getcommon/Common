@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../models/chat_models.dart';
 import '../services/chat_service.dart';
+import '../core/theme/app_colors.dart';
 
 class ChatDetailPage extends StatefulWidget {
   final String conversationId;
@@ -114,7 +115,26 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(widget.otherUserName)),
+      appBar: AppBar(
+        titleSpacing: 0,
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              widget.otherUserName,
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+            ),
+            Text(
+              'Connected through Common',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: AppColors.textSecondaryLight,
+              ),
+            ),
+          ],
+        ),
+      ),
       body: Column(
         children: [
           Expanded(
@@ -143,24 +163,20 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
                       children: [
                         Icon(
                           Icons.chat_bubble_outline,
-                          size: 48,
-                          color: Colors.grey[400],
+                          size: 38,
+                          color: AppColors.textSecondaryLight,
                         ),
                         const SizedBox(height: 16),
                         Text(
-                          'No messages yet',
-                          style: TextStyle(
-                            fontSize: 16,
-                            color: Colors.grey[600],
-                          ),
+                          'Your conversation starts here.',
+                          style: Theme.of(context).textTheme.titleMedium,
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          'Send a message to start the conversation!',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.grey[500],
-                          ),
+                          'Try a simple hello, or ask about something you have in common.',
+                          textAlign: TextAlign.center,
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(color: AppColors.textSecondaryLight),
                         ),
                       ],
                     ),
@@ -206,7 +222,7 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
 
                 return ListView.builder(
                   controller: _scrollController,
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.fromLTRB(20, 24, 20, 16),
                   itemCount: messages.length,
                   itemBuilder: (context, index) {
                     final message = messages[index];
@@ -334,8 +350,13 @@ class _MessageBubble extends StatelessWidget {
           maxWidth: MediaQuery.of(context).size.width * 0.75,
         ),
         decoration: BoxDecoration(
-          color: isMe ? Theme.of(context).primaryColor : Colors.grey[300],
-          borderRadius: BorderRadius.circular(20),
+          color: isMe ? AppColors.primary : AppColors.surfaceVariantLight,
+          borderRadius: BorderRadius.only(
+            topLeft: const Radius.circular(18),
+            topRight: const Radius.circular(18),
+            bottomLeft: Radius.circular(isMe ? 18 : 4),
+            bottomRight: Radius.circular(isMe ? 4 : 18),
+          ),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -343,7 +364,7 @@ class _MessageBubble extends StatelessWidget {
             Text(
               message.text,
               style: TextStyle(
-                color: isMe ? Colors.white : Colors.black87,
+                color: isMe ? Colors.white : AppColors.textPrimaryLight,
                 fontSize: 15,
               ),
             ),
@@ -351,7 +372,7 @@ class _MessageBubble extends StatelessWidget {
             Text(
               _formatTimestamp(message.timestamp),
               style: TextStyle(
-                color: isMe ? Colors.white70 : Colors.black54,
+                color: isMe ? Colors.white70 : AppColors.textSecondaryLight,
                 fontSize: 11,
               ),
             ),
@@ -385,10 +406,10 @@ class _MessageInput extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppColors.surfaceLight,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 5,
             offset: const Offset(0, -2),
           ),
@@ -401,13 +422,13 @@ class _MessageInput extends StatelessWidget {
               child: TextField(
                 controller: controller,
                 decoration: InputDecoration(
-                  hintText: 'Type a message...',
+                  hintText: 'Write a message',
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(24),
                     borderSide: BorderSide.none,
                   ),
                   filled: true,
-                  fillColor: Colors.grey[100],
+                  fillColor: AppColors.surfaceVariantLight,
                   contentPadding: const EdgeInsets.symmetric(
                     horizontal: 20,
                     vertical: 10,
@@ -421,8 +442,11 @@ class _MessageInput extends StatelessWidget {
             const SizedBox(width: 8),
             IconButton(
               onPressed: onSend,
-              icon: Icon(Icons.send, color: Theme.of(context).primaryColor),
-              iconSize: 28,
+              icon: const Icon(
+                Icons.arrow_upward_rounded,
+                color: AppColors.primary,
+              ),
+              iconSize: 23,
             ),
           ],
         ),
