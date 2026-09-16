@@ -44,6 +44,7 @@ class _SearchRadiusSettingsState extends State<SearchRadiusSettings> {
         classYear: widget.profile.classYear,
         major: widget.profile.major,
         interests: widget.profile.interests,
+        vibeTags: widget.profile.vibeTags,
         createdAt: widget.profile.createdAt,
         updatedAt: DateTime.now(),
         location: widget.profile.location,
@@ -55,9 +56,7 @@ class _SearchRadiusSettingsState extends State<SearchRadiusSettings> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(
-              'Search radius updated to ${formatRadius(newRadius)}',
-            ),
+            content: Text('Discovery radius updated'),
             duration: const Duration(seconds: 2),
           ),
         );
@@ -94,7 +93,7 @@ class _SearchRadiusSettingsState extends State<SearchRadiusSettings> {
                 Icon(Icons.radar, color: colorScheme.primary, size: 20),
                 const SizedBox(width: 8),
                 Text(
-                  'Search Radius',
+                  'Discovery radius',
                   style: theme.textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.w600,
                   ),
@@ -103,7 +102,7 @@ class _SearchRadiusSettingsState extends State<SearchRadiusSettings> {
             ),
             const SizedBox(height: 4),
             Text(
-              'Find people within walking distance',
+              'Only people within this nearby range can appear in Discover.',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
@@ -115,7 +114,7 @@ class _SearchRadiusSettingsState extends State<SearchRadiusSettings> {
               child: Column(
                 children: [
                   Text(
-                    formatRadius(_currentRadius),
+                    'Under 0.5 mi',
                     style: theme.textTheme.headlineMedium?.copyWith(
                       color: colorScheme.primary,
                       fontWeight: FontWeight.bold,
@@ -150,8 +149,8 @@ class _SearchRadiusSettingsState extends State<SearchRadiusSettings> {
                 value: _currentRadius,
                 min: kMinSearchRadiusKm,
                 max: kMaxSearchRadiusKm,
-                divisions: 10, // 0.25 km increments
-                label: formatRadius(_currentRadius),
+                divisions: 4,
+                label: 'Nearby',
                 onChanged: _isSaving
                     ? null
                     : (value) {
@@ -173,13 +172,13 @@ class _SearchRadiusSettingsState extends State<SearchRadiusSettings> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  formatRadius(kMinSearchRadiusKm),
+                  'Very close',
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
                 ),
                 Text(
-                  formatRadius(kMaxSearchRadiusKm),
+                  'Under 0.5 mi',
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
@@ -199,13 +198,13 @@ class _SearchRadiusSettingsState extends State<SearchRadiusSettings> {
 
   String _getRadiusDescription(double radiusKm) {
     if (radiusKm <= 0.7) {
-      return 'Same building • 5 min walk';
+      return 'Very close by';
     } else if (radiusKm <= 1.2) {
-      return 'Nearby area • 10 min walk';
+      return 'A few blocks away';
     } else if (radiusKm <= 2.0) {
-      return 'Campus area • 20 min walk';
+      return 'Nearby';
     } else {
-      return 'Full campus • 30 min walk';
+      return 'At your selected limit';
     }
   }
 }

@@ -1,14 +1,14 @@
-import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:geolocator/geolocator.dart';
-import 'package:flutter/foundation.dart';
+/// Personal profile and privacy controls for Common.
+library;
 
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
+
+import '../core/theme/app_colors.dart';
 import '../models/user_profile.dart';
-import '../services/profile_service.dart';
-import '../services/location_service.dart';
 import '../services/auth_service.dart';
-import '../widgets/location_picker_page.dart';
+import '../services/location_service.dart';
+import '../services/profile_service.dart';
 import '../widgets/search_radius_settings.dart';
 import 'profile_setup_page.dart';
 
@@ -19,774 +19,340 @@ class ProfilePage extends StatelessWidget {
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return const Center(child: Text('Sign in to see your profile.'));
     }
+
     return StreamBuilder<UserProfile?>(
       stream: ProfileService.instance.watchProfile(user.uid),
-      builder: (context, snap) {
-        if (snap.connectionState == ConnectionState.waiting) {
-          return const Scaffold(
-            appBar: _AppBar(title: 'My Profile'),
-            body: Center(child: CircularProgressIndicator()),
-          );
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
         }
-        if (snap.hasError) {
-          return Scaffold(
-            appBar: const _AppBar(title: 'My Profile'),
-            body: Center(child: Text('Error loading profile: ${snap.error}')),
-          );
-        }
-        final profile = snap.data;
+        final profile = snapshot.data;
         if (profile == null) {
-          return Scaffold(
-            appBar: const _AppBar(title: 'My Profile'),
-            body: Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text('No profile found.'),
-                  const SizedBox(height: 12),
-                  FilledButton(
-                    onPressed: () async {
-                      final fallback = UserProfile(
-                        uid: user.uid,
-                        displayName: user.displayName,
-                        photoUrl: user.photoURL,
-                        bio: null,
-                        classYear: null,
-                        major: null,
-                        interests: const [],
-                        createdAt: DateTime.now(),
-                        updatedAt: DateTime.now(),
-                      );
-                      if (!context.mounted) return;
-                      await Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => ProfileSetupPage(profile: fallback),
-                        ),
-                      );
-                    },
-                    child: const Text('Create profile'),
-                  ),
-                ],
-              ),
-            ),
-          );
+          return const _ProfileState(message: 'Your profile is not ready yet.');
         }
-
-        return Scaffold(
-          appBar: _AppBar(
-            title: 'My Profile',
-            actions: [
-              IconButton(
-                tooltip: 'Edit',
-                icon: const Icon(Icons.edit),
-                onPressed: () async {
-                  await Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => ProfileSetupPage(profile: profile),
-                    ),
-                  );
-                },
-              ),
-            ],
-          ),
-          body: RefreshIndicator(
-            onRefresh: () async {
-              // Force a one-time fetch to refresh cache
-              await FirebaseFirestore.instance
-                  .doc('users/${profile.uid}')
-                  .get(const GetOptions(source: Source.server));
-            },
-            child: ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                Row(
-                  children: [
-                    CircleAvatar(
-                      radius: 36,
-                      backgroundImage: (profile.photoUrl != null)
-                          ? NetworkImage(profile.photoUrl!)
-                          : null,
-                      child: (profile.photoUrl == null)
-                          ? const Icon(Icons.person, size: 36)
-                          : null,
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            profile.displayName ?? 'Friend',
-                            style: const TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            FirebaseAuth.instance.currentUser?.email ?? '',
-                            style: const TextStyle(color: Colors.black54),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                _KV('Major', profile.major),
-                _KV('Class year', profile.classYear),
-                if ((profile.bio ?? '').isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Bio',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(profile.bio!),
-                ],
-                const SizedBox(height: 16),
-                const Text(
-                  'Interests',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(height: 8),
-                if (profile.interests.isEmpty)
-                  const Text('No interests selected yet.')
-                else
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      for (final tag in profile.interests)
-                        Chip(label: Text(tag)),
-                    ],
-                  ),
-                const SizedBox(height: 24),
-                const Divider(),
-                const SizedBox(height: 16),
-                _LocationSettings(profile: profile),
-                const SizedBox(height: 16),
-                // Search radius settings
-                SearchRadiusSettings(profile: profile),
-                const SizedBox(height: 24),
-                const Divider(),
-                const SizedBox(height: 16),
-                // Debug info for proximity matching
-                if (kDebugMode) _DebugInfo(profile: profile),
-                const SizedBox(height: 24),
-                const Divider(),
-                const SizedBox(height: 16),
-                // Logout button
-                OutlinedButton.icon(
-                  onPressed: () async {
-                    // Show confirmation dialog
-                    final confirm = await showDialog<bool>(
-                      context: context,
-                      builder: (context) => AlertDialog(
-                        title: const Text('Sign out'),
-                        content: const Text(
-                          'Are you sure you want to sign out?',
-                        ),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.of(context).pop(false),
-                            child: const Text('Cancel'),
-                          ),
-                          TextButton(
-                            onPressed: () => Navigator.of(context).pop(true),
-                            child: const Text('Sign out'),
-                          ),
-                        ],
-                      ),
-                    );
-
-                    if (confirm == true) {
-                      await AuthService.instance.signOut();
-                      // Navigation will be handled automatically by auth state listener
-                    }
-                  },
-                  icon: const Icon(Icons.logout),
-                  label: const Text('Sign Out'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.red,
-                    side: const BorderSide(color: Colors.red),
-                  ),
-                ),
-                const SizedBox(height: 16),
-              ],
-            ),
-          ),
-        );
+        return _ProfileContent(profile: profile);
       },
     );
   }
 }
 
-class _LocationSettings extends StatefulWidget {
+class _ProfileContent extends StatelessWidget {
+  const _ProfileContent({required this.profile});
   final UserProfile profile;
-  const _LocationSettings({required this.profile});
-
-  @override
-  State<_LocationSettings> createState() => _LocationSettingsState();
-}
-
-class _LocationSettingsState extends State<_LocationSettings> {
-  bool _isToggling = false;
-  Position? _currentPosition;
-  bool _isLoadingCoordinates = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadCurrentCoordinates();
-  }
-
-  Future<void> _loadCurrentCoordinates() async {
-    if (kDebugMode) {
-      debugPrint('👤 ===== LOAD CURRENT COORDINATES STARTED =====');
-    }
-
-    setState(() => _isLoadingCoordinates = true);
-    try {
-      // Get the saved location from the profile instead of GPS coordinates
-      final location = widget.profile.location;
-
-      if (kDebugMode) {
-        debugPrint('👤 📍 Profile location data:');
-        debugPrint('👤   - Latitude: ${location?.latitude}');
-        debugPrint('👤   - Longitude: ${location?.longitude}');
-        debugPrint('👤   - Last Updated: ${location?.lastUpdated}');
-        debugPrint('👤   - Is Visible: ${location?.isVisible}');
-      }
-
-      if (location?.latitude != null && location?.longitude != null) {
-        if (kDebugMode) {
-          debugPrint('👤 ✅ Found saved location coordinates, using those');
-        }
-        // Create a Position object from the saved coordinates
-        final position = Position(
-          latitude: location!.latitude!,
-          longitude: location.longitude!,
-          timestamp: location.lastUpdated ?? DateTime.now(),
-          accuracy: 10.0,
-          altitude: 0.0,
-          altitudeAccuracy: 0.0,
-          heading: 0.0,
-          headingAccuracy: 0.0,
-          speed: 0.0,
-          speedAccuracy: 0.0,
-        );
-
-        if (kDebugMode) {
-          debugPrint(
-            '👤 ✅ Created Position from saved coordinates: ${position.latitude}, ${position.longitude}',
-          );
-        }
-
-        if (mounted) {
-          setState(() {
-            _currentPosition = position;
-            _isLoadingCoordinates = false;
-          });
-        }
-      } else {
-        if (kDebugMode) {
-          debugPrint(
-            '👤 ⚠️ No saved location found, falling back to GPS coordinates',
-          );
-        }
-        // Fallback to GPS coordinates if no saved location
-        final hasPermission = await LocationService.instance
-            .hasLocationPermission();
-        debugPrint('DEBUG: Has location permission: $hasPermission');
-
-        final position = await LocationService.instance.getCurrentCoordinates();
-        debugPrint('DEBUG: Got position: $position');
-
-        if (mounted) {
-          setState(() {
-            _currentPosition = position;
-            _isLoadingCoordinates = false;
-          });
-        }
-      }
-
-      if (kDebugMode) {
-        debugPrint(
-          '👤 📱 Final position set: ${_currentPosition?.latitude}, ${_currentPosition?.longitude}',
-        );
-        debugPrint('👤 ===== LOAD CURRENT COORDINATES COMPLETED =====');
-      }
-    } catch (e) {
-      debugPrint('DEBUG: Error getting coordinates: $e');
-      if (mounted) {
-        setState(() => _isLoadingCoordinates = false);
-      }
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
-    final location = widget.profile.location;
-    final isVisible = location?.isVisible ?? false;
-    final lastUpdated = location?.lastUpdated;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            const Icon(Icons.location_on, size: 20, color: Colors.black54),
-            const SizedBox(width: 8),
-            const Text(
-              'Location Sharing',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+    return Scaffold(
+      body: SafeArea(
+        child: CustomScrollView(
+          slivers: [
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(24, 18, 24, 40),
+              sliver: SliverList(
+                delegate: SliverChildListDelegate([
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Profile',
+                          style: Theme.of(context).textTheme.displaySmall
+                              ?.copyWith(
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: -1.1,
+                              ),
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => ProfileSetupPage(profile: profile),
+                          ),
+                        ),
+                        icon: const Icon(Icons.edit_outlined),
+                        color: AppColors.primary,
+                        tooltip: 'Edit profile',
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+                  _Identity(profile: profile),
+                  if ((profile.bio ?? '').isNotEmpty) ...[
+                    const SizedBox(height: 18),
+                    Text(
+                      profile.bio!,
+                      style: Theme.of(
+                        context,
+                      ).textTheme.bodyLarge?.copyWith(height: 1.5),
+                    ),
+                  ],
+                  const SizedBox(height: 30),
+                  const _SectionHeading('Your interests'),
+                  const SizedBox(height: 11),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: profile.interests.isEmpty
+                        ? [
+                            const _PlainText(
+                              'Add a few interests to make discovery more personal.',
+                            ),
+                          ]
+                        : profile.interests
+                              .map((interest) => _InterestChip(interest))
+                              .toList(),
+                  ),
+                  const SizedBox(height: 34),
+                  const _SectionHeading('Discoverability'),
+                  const SizedBox(height: 12),
+                  _DiscoverabilityToggle(profile: profile),
+                  const SizedBox(height: 12),
+                  SearchRadiusSettings(profile: profile),
+                  const SizedBox(height: 34),
+                  const _SectionHeading('Privacy & safety'),
+                  const SizedBox(height: 12),
+                  const _PrivacyNote(
+                    icon: Icons.location_on_outlined,
+                    title: 'Your exact location stays private',
+                    message:
+                        'Others only see a broad distance band—not your coordinates or venue.',
+                  ),
+                  const SizedBox(height: 12),
+                  const _PrivacyNote(
+                    icon: Icons.shield_outlined,
+                    title: 'Connections start with mutual interest',
+                    message: 'Messaging opens only after you both wave.',
+                  ),
+                  const SizedBox(height: 30),
+                  OutlinedButton.icon(
+                    onPressed: () => _confirmSignOut(context),
+                    icon: const Icon(Icons.logout, size: 18),
+                    label: const Text('Sign out'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.textSecondaryLight,
+                      side: const BorderSide(color: AppColors.borderLight),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 11,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(22),
+                      ),
+                    ),
+                  ),
+                ]),
+              ),
             ),
           ],
         ),
-        const SizedBox(height: 12),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(12),
+      ),
+    );
+  }
+
+  Future<void> _confirmSignOut(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Sign out?'),
+        content: const Text('You can sign back in whenever you’re ready.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Keep me signed in'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Sign out'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) await AuthService.instance.signOut();
+  }
+}
+
+class _Identity extends StatelessWidget {
+  const _Identity({required this.profile});
+  final UserProfile profile;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    children: [
+      CircleAvatar(
+        radius: 38,
+        backgroundColor: AppColors.surfaceVariantLight,
+        backgroundImage: profile.photoUrl == null || profile.photoUrl!.isEmpty
+            ? null
+            : NetworkImage(profile.photoUrl!),
+        child: profile.photoUrl == null || profile.photoUrl!.isEmpty
+            ? Text(
+                (profile.displayName ?? '?').substring(0, 1).toUpperCase(),
+                style: const TextStyle(
+                  color: AppColors.secondary,
+                  fontSize: 24,
+                  fontWeight: FontWeight.w600,
+                ),
+              )
+            : null,
+      ),
+      const SizedBox(width: 15),
+      Expanded(
+        child: Text(
+          profile.displayName ?? 'Your name',
+          style: Theme.of(
+            context,
+          ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w600),
+        ),
+      ),
+    ],
+  );
+}
+
+class _DiscoverabilityToggle extends StatefulWidget {
+  const _DiscoverabilityToggle({required this.profile});
+  final UserProfile profile;
+
+  @override
+  State<_DiscoverabilityToggle> createState() => _DiscoverabilityToggleState();
+}
+
+class _DiscoverabilityToggleState extends State<_DiscoverabilityToggle> {
+  bool _saving = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final visible = widget.profile.location?.isVisible ?? false;
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceVariantLight,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        children: [
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Share my location',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Help nearby students with similar interests find you',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey[600],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Switch(
-                      value: isVisible,
-                      onChanged: _isToggling
-                          ? null
-                          : (value) async {
-                              setState(() => _isToggling = true);
-                              // Capture ScaffoldMessenger before async gap
-                              final messenger = ScaffoldMessenger.of(context);
-                              try {
-                                await LocationService.instance
-                                    .setLocationVisibility(
-                                      widget.profile.uid,
-                                      value,
-                                    );
-                                if (mounted && value) {
-                                  messenger.showSnackBar(
-                                    const SnackBar(
-                                      content: Text('Location sharing enabled'),
-                                      duration: Duration(seconds: 2),
-                                    ),
-                                  );
-                                }
-                              } catch (e) {
-                                if (mounted) {
-                                  messenger.showSnackBar(
-                                    SnackBar(
-                                      content: Text('Error: $e'),
-                                      backgroundColor: Colors.red,
-                                    ),
-                                  );
-                                }
-                              } finally {
-                                if (mounted) {
-                                  setState(() => _isToggling = false);
-                                }
-                              }
-                            },
-                    ),
-                  ],
+                Text(
+                  visible ? 'You’re discoverable' : 'You’re paused',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
                 ),
-                if (lastUpdated != null) ...[
-                  const SizedBox(height: 8),
-                  const Divider(),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.access_time,
-                        size: 14,
-                        color: Colors.grey[600],
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        'Last updated: ${_formatTimestamp(lastUpdated)}',
-                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                      ),
-                    ],
-                  ),
-                ],
-                // Current coordinates display
-                const SizedBox(height: 8),
-                const Divider(),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Icon(Icons.my_location, size: 14, color: Colors.grey[600]),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Current Location',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                              color: Colors.black87,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          if (_isLoadingCoordinates)
-                            Text(
-                              'Loading coordinates...',
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: Colors.grey[600],
-                                fontStyle: FontStyle.italic,
-                              ),
-                            )
-                          else if (_currentPosition != null)
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  '${_currentPosition!.latitude.toStringAsFixed(6)}, ${_currentPosition!.longitude.toStringAsFixed(6)}',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: Colors.grey[600],
-                                    fontFamily: 'monospace',
-                                  ),
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  'Accuracy: ${_currentPosition!.accuracy.toStringAsFixed(0)}m',
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    color: Colors.grey[500],
-                                  ),
-                                ),
-                              ],
-                            )
-                          else
-                            Text(
-                              'Location not available - Check permissions',
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: Colors.grey[600],
-                                fontStyle: FontStyle.italic,
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.refresh, size: 16),
-                      onPressed: _isLoadingCoordinates
-                          ? null
-                          : _loadCurrentCoordinates,
-                      tooltip: 'Refresh coordinates',
-                    ),
-                  ],
+                const SizedBox(height: 4),
+                Text(
+                  visible
+                      ? 'People with meaningful common ground can find you nearby.'
+                      : 'You won’t appear in Discover until you turn this back on.',
+                  style: Theme.of(context).textTheme.bodySmall,
                 ),
-                if (isVisible) ...[
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextButton.icon(
-                          onPressed: () async {
-                            // Capture ScaffoldMessenger before async gap
-                            final messenger = ScaffoldMessenger.of(context);
-                            try {
-                              // Force-fetch latest location from Firestore server (read-only)
-                              await FirebaseFirestore.instance
-                                  .doc('users/${widget.profile.uid}')
-                                  .get(const GetOptions(source: Source.server));
-                              // Reload coordinates display from profile
-                              if (mounted) {
-                                await _loadCurrentCoordinates();
-                                messenger.showSnackBar(
-                                  const SnackBar(
-                                    content: Text(
-                                      'Location reloaded from server',
-                                    ),
-                                    duration: Duration(seconds: 2),
-                                  ),
-                                );
-                              }
-                            } catch (e) {
-                              if (mounted) {
-                                messenger.showSnackBar(
-                                  SnackBar(
-                                    content: Text('Error reloading: $e'),
-                                    backgroundColor: Colors.red,
-                                  ),
-                                );
-                              }
-                            }
-                          },
-                          icon: const Icon(Icons.refresh, size: 16),
-                          label: const Text('Refresh'),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          onPressed: () async {
-                            // Navigate to map picker
-                            final result = await Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (context) => LocationPickerPage(
-                                  initialLatitude: location?.latitude,
-                                  initialLongitude: location?.longitude,
-                                  initialAddress: 'Current location',
-                                ),
-                              ),
-                            );
-
-                            // Refresh the page after returning from map picker
-                            if (result != null && mounted) {
-                              if (kDebugMode) {
-                                debugPrint(
-                                  '👤 🔄 Location picker returned with result: $result',
-                                );
-                                debugPrint('👤 🔄 Reloading coordinates...');
-                              }
-                              // Reload coordinates to show the updated location
-                              await _loadCurrentCoordinates();
-                            } else if (kDebugMode) {
-                              debugPrint(
-                                '👤 ⚠️ Location picker returned with no result or widget not mounted',
-                              );
-                            }
-                          },
-                          icon: const Icon(Icons.map, size: 16),
-                          label: const Text('Choose on Map'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Theme.of(
-                              context,
-                            ).colorScheme.primary,
-                            foregroundColor: Theme.of(
-                              context,
-                            ).colorScheme.onPrimary,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
               ],
             ),
           ),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          'Your exact location is never shared. We use coarse location data to find nearby students within approximately 1-2km.',
-          style: TextStyle(
-            fontSize: 12,
-            color: Colors.grey[600],
-            fontStyle: FontStyle.italic,
-          ),
-        ),
-      ],
-    );
-  }
-
-  String _formatTimestamp(DateTime dt) {
-    final now = DateTime.now();
-    final diff = now.difference(dt);
-
-    if (diff.inMinutes < 1) return 'Just now';
-    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
-    if (diff.inHours < 24) return '${diff.inHours}h ago';
-    return '${diff.inDays}d ago';
-  }
-}
-
-class _AppBar extends StatelessWidget implements PreferredSizeWidget {
-  final String title;
-  final List<Widget>? actions;
-  const _AppBar({required this.title, this.actions});
-  @override
-  Widget build(BuildContext context) {
-    return AppBar(title: Text(title), actions: actions);
-  }
-
-  @override
-  Size get preferredSize => const Size.fromHeight(kToolbarHeight);
-}
-
-class _KV extends StatelessWidget {
-  final String label;
-  final String? value;
-  const _KV(this.label, this.value);
-  @override
-  Widget build(BuildContext context) {
-    if (value == null || value!.isEmpty) return const SizedBox.shrink();
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 100,
-            child: Text(
-              label,
-              style: const TextStyle(
-                color: Colors.black54,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(child: Text(value!)),
+          Switch(value: visible, onChanged: _saving ? null : _setVisible),
         ],
       ),
     );
   }
+
+  Future<void> _setVisible(bool visible) async {
+    setState(() => _saving = true);
+    try {
+      await LocationService.instance.setLocationVisibility(
+        widget.profile.uid,
+        visible,
+      );
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
 }
 
-class _DebugInfo extends StatelessWidget {
-  final UserProfile profile;
-  const _DebugInfo({required this.profile});
-
+class _SectionHeading extends StatelessWidget {
+  const _SectionHeading(this.label);
+  final String label;
   @override
-  Widget build(BuildContext context) {
-    final location = profile.location;
+  Widget build(BuildContext context) => Text(
+    label,
+    style: Theme.of(
+      context,
+    ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+  );
+}
 
-    return Card(
-      color: Colors.blue[50],
-      child: Padding(
-        padding: const EdgeInsets.all(12),
+class _InterestChip extends StatelessWidget {
+  const _InterestChip(this.label);
+  final String label;
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+    decoration: BoxDecoration(
+      color: const Color(0xFFF4E3DB),
+      borderRadius: BorderRadius.circular(20),
+    ),
+    child: Text(
+      label,
+      style: const TextStyle(
+        color: AppColors.primaryDark,
+        fontSize: 13,
+        fontWeight: FontWeight.w600,
+      ),
+    ),
+  );
+}
+
+class _PrivacyNote extends StatelessWidget {
+  const _PrivacyNote({
+    required this.icon,
+    required this.title,
+    required this.message,
+  });
+  final IconData icon;
+  final String title;
+  final String message;
+  @override
+  Widget build(BuildContext context) => Row(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Icon(icon, size: 20, color: AppColors.secondary),
+      const SizedBox(width: 11),
+      Expanded(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                const Icon(Icons.bug_report, size: 20, color: Colors.blue),
-                const SizedBox(width: 8),
-                const Text(
-                  'Debug Info (Proximity Matching)',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.blue,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            const Divider(),
-            const SizedBox(height: 8),
-            _DebugRow('User ID', profile.uid),
-            _DebugRow('Display Name', profile.displayName ?? 'Not set'),
-            _DebugRow('Interests Count', '${profile.interests.length}'),
-            _DebugRow('Interests', profile.interests.join(', ')),
-            const SizedBox(height: 8),
-            const Text(
-              'Location Data:',
-              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
-            ),
-            const SizedBox(height: 4),
-            _DebugRow('Location Visible', '${location?.isVisible ?? false}'),
-            _DebugRow('Geohash', location?.geohash ?? 'Not set'),
-            _DebugRow(
-              'Latitude',
-              location?.latitude?.toStringAsFixed(6) ?? 'Not set',
-            ),
-            _DebugRow(
-              'Longitude',
-              location?.longitude?.toStringAsFixed(6) ?? 'Not set',
-            ),
-            _DebugRow(
-              'Last Updated',
-              location?.lastUpdated != null
-                  ? _formatTimestamp(location!.lastUpdated!)
-                  : 'Never',
-            ),
-            const SizedBox(height: 8),
             Text(
-              'For proximity matching to work:\n'
-              '• Location must be visible (toggle ON above)\n'
-              '• At least 1 interest must be set\n'
-              '• Both users must share at least 1 common interest\n'
-              '• Both users must be within ~5km of each other',
-              style: TextStyle(
-                fontSize: 10,
-                color: Colors.grey[700],
-                fontStyle: FontStyle.italic,
-              ),
+              title,
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
             ),
+            const SizedBox(height: 3),
+            Text(message, style: Theme.of(context).textTheme.bodySmall),
           ],
         ),
       ),
-    );
-  }
-
-  String _formatTimestamp(DateTime dt) {
-    final now = DateTime.now();
-    final diff = now.difference(dt);
-
-    if (diff.inMinutes < 1) return 'Just now';
-    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
-    if (diff.inHours < 24) return '${diff.inHours}h ago';
-    return '${diff.inDays}d ago';
-  }
+    ],
+  );
 }
 
-class _DebugRow extends StatelessWidget {
-  final String label;
-  final String value;
-  const _DebugRow(this.label, this.value);
-
+class _PlainText extends StatelessWidget {
+  const _PlainText(this.text);
+  final String text;
   @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 100,
-            child: Text(
-              label,
-              style: TextStyle(
-                fontSize: 11,
-                color: Colors.grey[700],
-                fontFamily: 'monospace',
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              value,
-              style: const TextStyle(fontSize: 11, fontFamily: 'monospace'),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  Widget build(BuildContext context) => Text(
+    text,
+    style: Theme.of(
+      context,
+    ).textTheme.bodyMedium?.copyWith(color: AppColors.textSecondaryLight),
+  );
+}
+
+class _ProfileState extends StatelessWidget {
+  const _ProfileState({required this.message});
+  final String message;
+  @override
+  Widget build(BuildContext context) =>
+      Scaffold(body: Center(child: Text(message)));
 }

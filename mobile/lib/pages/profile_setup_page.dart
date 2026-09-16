@@ -21,8 +21,6 @@ class ProfileSetupPage extends StatefulWidget {
 class _ProfileSetupPageState extends State<ProfileSetupPage> {
   late final TextEditingController _name;
   late final TextEditingController _bio;
-  late final TextEditingController _major;
-  late final TextEditingController _classYear;
   late final TextEditingController _customInterest;
   late Set<String> _interests;
   late Set<String> _vibeTags;
@@ -33,10 +31,9 @@ class _ProfileSetupPageState extends State<ProfileSetupPage> {
   File? _newProfileImage; // New image selected from gallery/camera
   String? _profileImageUrl; // Current image URL from profile
 
-  // Track which categories are expanded (start with Academic expanded)
+  // Interest groups begin collapsed to keep the editor calm and scannable.
   final Map<InterestCategory, bool> _expandedCategories = {
-    for (var category in InterestCategory.values)
-      category: category == InterestCategory.academic,
+    for (var category in InterestCategory.values) category: false,
   };
 
   @override
@@ -44,8 +41,6 @@ class _ProfileSetupPageState extends State<ProfileSetupPage> {
     super.initState();
     _name = TextEditingController(text: widget.profile.displayName ?? '');
     _bio = TextEditingController(text: widget.profile.bio ?? '');
-    _major = TextEditingController(text: widget.profile.major ?? '');
-    _classYear = TextEditingController(text: widget.profile.classYear ?? '');
     _customInterest = TextEditingController();
     _interests = widget.profile.interests.toSet();
     _vibeTags = widget.profile.vibeTags.toSet();
@@ -56,8 +51,6 @@ class _ProfileSetupPageState extends State<ProfileSetupPage> {
   void dispose() {
     _name.dispose();
     _bio.dispose();
-    _major.dispose();
-    _classYear.dispose();
     _customInterest.dispose();
     super.dispose();
   }
@@ -200,14 +193,15 @@ class _ProfileSetupPageState extends State<ProfileSetupPage> {
         displayName: name.isEmpty ? widget.profile.displayName : name,
         photoUrl: newPhotoUrl,
         bio: _bio.text.trim().isEmpty ? null : _bio.text.trim(),
-        classYear: _classYear.text.trim().isEmpty
-            ? null
-            : _classYear.text.trim(),
-        major: _major.text.trim().isEmpty ? null : _major.text.trim(),
+        // Preserve legacy private fields without presenting them publicly.
+        classYear: widget.profile.classYear,
+        major: widget.profile.major,
         interests: _interests.toList()..sort(),
         vibeTags: _vibeTags.toList(),
         createdAt: widget.profile.createdAt,
         updatedAt: DateTime.now(),
+        location: widget.profile.location,
+        searchRadiusKm: widget.profile.searchRadiusKm,
       );
       await ProfileService.instance.upsertProfile(p);
 
@@ -241,7 +235,7 @@ class _ProfileSetupPageState extends State<ProfileSetupPage> {
     final validationError = validateInterestSelection(_interests.toList());
     final canSave = validationError == null;
     return Scaffold(
-      appBar: AppBar(title: const Text('Create your profile')),
+      appBar: AppBar(title: const Text('Edit profile')),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.all(16),
@@ -312,28 +306,6 @@ class _ProfileSetupPageState extends State<ProfileSetupPage> {
               controller: _bio,
               decoration: const InputDecoration(labelText: 'Bio (optional)'),
               maxLines: 3,
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _major,
-                    decoration: const InputDecoration(
-                      labelText: 'Major (optional)',
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                SizedBox(
-                  width: 120,
-                  child: TextField(
-                    controller: _classYear,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: 'Class year'),
-                  ),
-                ),
-              ],
             ),
             const SizedBox(height: 16),
 

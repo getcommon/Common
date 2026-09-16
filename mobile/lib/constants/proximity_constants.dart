@@ -3,16 +3,16 @@
 library;
 
 /// Minimum search radius in kilometers
-/// Covers immediate area (same building/block)
-const double kMinSearchRadiusKm = 0.5;
+/// Covers the closest block or building.
+const double kMinSearchRadiusKm = 0.16;
 
 /// Default search radius in kilometers
-/// Comfortable 15-20 minute walk, covers most campus areas
-const double kDefaultSearchRadiusKm = 1.5;
+/// Product's initial preferred public discovery radius: under 0.5 miles.
+const double kDefaultSearchRadiusKm = 0.8;
 
 /// Maximum search radius in kilometers
-/// Covers entire campus, ~30 minute walk maximum
-const double kMaxSearchRadiusKm = 3.0;
+/// One mile remains an experiment for later; version one stops at 0.5 miles.
+const double kMaxSearchRadiusKm = 0.8;
 
 /// Minimum number of common interests required for a match
 const int kMinCommonInterests = 1;

@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mobile/constants/proximity_constants.dart';
 import 'package:mobile/models/user_profile.dart';
 
 void main() {
@@ -137,7 +138,7 @@ void main() {
       expect(profile.effectiveSearchRadiusKm, isPositive);
     });
 
-    test('effectiveSearchRadiusKm should use provided value', () {
+    test('effectiveSearchRadiusKm should clamp a provided value to the cap', () {
       final profile = UserProfile(
         uid: 'user1',
         searchRadiusKm: 3.0,
@@ -145,7 +146,7 @@ void main() {
         updatedAt: DateTime.now(),
       );
 
-      expect(profile.effectiveSearchRadiusKm, 3.0);
+      expect(profile.effectiveSearchRadiusKm, kMaxSearchRadiusKm);
     });
   });
 
