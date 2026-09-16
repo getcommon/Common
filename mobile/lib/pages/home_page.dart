@@ -1,965 +1,158 @@
-/// Home Page - Main landing page for Common Grounds
-///
-/// Shows:
-/// - Welcome message with user's name
-/// - Quick stats (nearby students, common interests, etc.)
-/// - Discover section with potential connections
-/// - Quick actions (find people, update location, etc.)
+/// Discover is intentionally a single, considered public profile rather than
+/// a feed of dashboard cards. It is the visual starting point for Common.
 library;
 
-import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../core/theme/app_spacing.dart';
-import '../core/theme/app_colors.dart';
-import '../core/widgets/app_card.dart';
-import '../core/widgets/avatar.dart';
-import '../core/widgets/empty_state.dart';
-import '../core/widgets/loading_indicator.dart';
-import '../services/profile_service.dart';
-import '../services/proximity_service.dart';
-import '../services/location_service.dart';
-import '../services/wave_service.dart';
-import '../models/user_profile.dart';
-import '../models/wave_models.dart';
-import '../utils/chat_utils.dart';
-import '../constants/proximity_constants.dart';
-import '../constants/vibe_tags.dart';
-import 'profile_setup_page.dart';
+import 'package:flutter/material.dart';
 
-class HomePage extends StatelessWidget {
+import '../core/theme/app_colors.dart';
+import '../data/discover_profiles.dart';
+import '../models/user_profile.dart';
+import '../services/profile_service.dart';
+import '../services/wave_service.dart';
+
+class HomePage extends StatefulWidget {
   const HomePage({super.key, this.onNavigateToTab});
 
-  /// Callback to navigate to a specific tab (0=Home, 1=Messages, 2=Profile)
   final void Function(int tabIndex)? onNavigateToTab;
+
+  @override
+  State<HomePage> createState() => _HomePageState();
+}
+
+class _HomePageState extends State<HomePage> {
+  bool _isSendingWave = false;
+  bool _waveSent = false;
 
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
-      return const Center(child: Text('Not logged in'));
+      return const Center(child: Text('Sign in to discover people nearby.'));
     }
 
-    return Scaffold(
-      body: SafeArea(
-        child: StreamBuilder<UserProfile?>(
-          stream: ProfileService.instance.watchProfile(user.uid),
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const LoadingIndicator(message: 'Loading your profile...');
-            }
+    return StreamBuilder<UserProfile?>(
+      stream: ProfileService.instance.watchProfile(user.uid),
+      builder: (context, snapshot) {
+        return Scaffold(
+          body: SafeArea(
+            child: CustomScrollView(
+              slivers: [
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(24, 18, 24, 40),
+                  sliver: SliverList(
+                    delegate: SliverChildListDelegate([
+                      const _DiscoverHeader(),
+                      const SizedBox(height: 30),
+                      _PublicProfile(
+                        profile: erenDiscoverProfile,
+                        waveSent: _waveSent,
+                        isSending: _isSendingWave,
+                        onWave: snapshot.data == null
+                            ? null
+                            : () => _sendWave(snapshot.data!),
+                      ),
+                    ]),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
 
-            if (snapshot.hasError) {
-              return Center(child: Text('Error: ${snapshot.error}'));
-            }
+  Future<void> _sendWave(UserProfile sender) async {
+    if (_isSendingWave || _waveSent) return;
+    setState(() => _isSendingWave = true);
 
-            final profile = snapshot.data;
-            if (profile == null) {
-              return const Center(child: Text('Profile not found'));
-            }
+    final id = await WaveService.instance.sendWave(
+      senderId: sender.uid,
+      receiverId: erenDiscoverProfile.profile.uid,
+      senderProfile: {
+        'displayName': sender.displayName,
+        'photoUrl': sender.photoUrl,
+      },
+      receiverProfile: {
+        'displayName': erenDiscoverProfile.profile.displayName,
+        'photoUrl': null,
+      },
+    );
 
-            return RefreshIndicator(
-              onRefresh: () async {
-                // Clear proximity cache to force fresh data
-                ProximityService.instance.clearCache();
-
-                // Refresh location in Firestore
-                await LocationService.instance.refreshLocation();
-
-                // Wait for Firestore to propagate
-                await Future.delayed(const Duration(milliseconds: 500));
-
-                // Refresh matches
-                await ProximityService.instance.refreshMatches(profile);
-              },
-              child: ListView(
-                padding: AppSpacing.screenPadding,
-                children: [
-                  const SizedBox(height: AppSpacing.md),
-
-                  // Welcome header
-                  _buildWelcomeHeader(context, profile),
-                  const SizedBox(height: AppSpacing.xl),
-
-                  // Quick stats (live counts)
-                  _buildQuickStats(context, user.uid),
-                  const SizedBox(height: AppSpacing.sm),
-
-                  // Search radius indicator
-                  _buildRadiusIndicator(context, profile),
-                  const SizedBox(height: AppSpacing.xl),
-
-                  // Quick actions
-                  _buildQuickActions(context, profile),
-                  const SizedBox(height: AppSpacing.xl),
-
-                  // Discover section
-                  _buildDiscoverSection(context, profile),
-                  const SizedBox(height: AppSpacing.xl),
-
-                  // Tips card
-                  _buildTipsCard(context),
-                  const SizedBox(height: AppSpacing.xl),
-                ],
-              ),
-            );
-          },
+    if (!mounted) return;
+    setState(() {
+      _isSendingWave = false;
+      _waveSent = id != null;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          id == null ? 'You already waved to Eren.' : 'Wave sent to Eren.',
         ),
       ),
     );
   }
+}
 
-  /// Welcome header with user name and avatar
-  Widget _buildWelcomeHeader(BuildContext context, UserProfile profile) {
-    final hour = DateTime.now().hour;
-    final greeting = hour < 12
-        ? 'Good morning'
-        : hour < 17
-        ? 'Good afternoon'
-        : 'Good evening';
+class _DiscoverHeader extends StatelessWidget {
+  const _DiscoverHeader();
 
+  @override
+  Widget build(BuildContext context) {
     return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        AppAvatar(
-          imageUrl: profile.photoUrl,
-          displayName: profile.displayName,
-          size: AppSpacing.avatarLg,
-        ),
-        const SizedBox(width: AppSpacing.md),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                '$greeting,',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Theme.of(context).brightness == Brightness.light
-                      ? AppColors.textSecondaryLight
-                      : AppColors.textSecondaryDark,
+                'Discover',
+                style: Theme.of(context).textTheme.displaySmall?.copyWith(
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: -1.1,
                 ),
               ),
-              const SizedBox(height: 4),
+              const SizedBox(height: 6),
               Text(
-                profile.displayName ?? 'Student',
-                style: Theme.of(context).textTheme.headlineSmall,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              if (profile.classYear != null || profile.major != null) ...[
-                const SizedBox(height: 4),
-                Text(
-                  [
-                    if (profile.major != null) profile.major,
-                    if (profile.classYear != null)
-                      'Class of ${profile.classYear}',
-                  ].join(' • '),
-                  style: Theme.of(context).textTheme.bodySmall,
+                'Someone nearby who shares your pace.',
+                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                  color: AppColors.textSecondaryLight,
                 ),
-              ],
+              ),
             ],
           ),
         ),
+        const _PresenceMark(),
       ],
     );
   }
+}
 
-  /// Quick stats cards - Shows discovery insights
-  Widget _buildQuickStats(BuildContext context, String userId) {
-    // TODO: Get real stats from Firestore
-    // - Nearby: Count of students within proximity (e.g., 1km radius)
-    // - Common Interests: Number of students with matching interests
-    // - Active Now: Students online/active in the past hour
+class _PresenceMark extends StatelessWidget {
+  const _PresenceMark();
 
-    return Row(
-      children: [
-        Expanded(
-          child: _StatCard(
-            icon: Icons.location_on_outlined,
-            label: 'Nearby',
-            value: '12', // Count of students within ~1km
-            sublabel: 'students',
-            color: AppColors.primary,
-          ),
-        ),
-        const SizedBox(width: AppSpacing.sm),
-        Expanded(
-          child: StreamBuilder<List<MutualMatch>>(
-            stream: WaveService.instance.watchMutualMatches(userId),
-            builder: (context, snapshot) {
-              final count = snapshot.data?.length ?? 0;
-              return _StatCard(
-                icon: Icons.interests_outlined,
-                label: 'Matches',
-                value: '$count',
-                sublabel: 'mutual',
-                color: AppColors.secondary,
-              );
-            },
-          ),
-        ),
-        const SizedBox(width: AppSpacing.sm),
-        Expanded(
-          child: _StatCard(
-            icon: Icons.online_prediction,
-            label: 'Active',
-            value: '3', // Students active now
-            sublabel: 'online',
-            color: AppColors.success,
-          ),
-        ),
-      ],
-    );
-  }
-
-  /// Search radius indicator
-  Widget _buildRadiusIndicator(BuildContext context, UserProfile profile) {
-    final radius = profile.effectiveSearchRadiusKm;
-    final theme = Theme.of(context);
-
+  @override
+  Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.sm,
-        vertical: AppSpacing.xs,
-      ),
+      margin: const EdgeInsets.only(top: 7),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
-        color: AppColors.info.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: AppColors.info.withValues(alpha: 0.3),
-          width: 1,
-        ),
+        color: AppColors.surfaceVariantLight,
+        borderRadius: BorderRadius.circular(20),
       ),
-      child: Row(
+      child: const Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.radar, size: 16, color: AppColors.info),
-          const SizedBox(width: AppSpacing.xs),
+          Icon(Icons.near_me_outlined, size: 15, color: AppColors.secondary),
+          SizedBox(width: 5),
           Text(
-            'Searching within ${formatRadius(radius)}',
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: AppColors.info,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          const SizedBox(width: AppSpacing.xs),
-          Icon(
-            Icons.settings_outlined,
-            size: 14,
-            color: AppColors.info.withValues(alpha: 0.7),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Quick action buttons
-  Widget _buildQuickActions(BuildContext context, UserProfile profile) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('Quick Actions', style: Theme.of(context).textTheme.titleMedium),
-        const SizedBox(height: AppSpacing.sm),
-        Row(
-          children: [
-            Expanded(
-              child: _ActionButton(
-                icon: Icons.my_location,
-                label: 'Refresh Location',
-                onTap: () async {
-                  final messenger = ScaffoldMessenger.of(context);
-
-                  // Clear ALL caches first
-                  ProximityService.instance.clearCache();
-
-                  // Update location in Firestore
-                  await LocationService.instance.refreshLocation();
-
-                  // Wait a moment for Firestore to propagate
-                  await Future.delayed(const Duration(milliseconds: 500));
-
-                  // Force refresh matches with cleared cache
-                  await ProximityService.instance.refreshMatches(profile);
-
-                  if (context.mounted) {
-                    messenger.showSnackBar(
-                      const SnackBar(
-                        content: Text(
-                          'Location updated! Refreshing nearby students...',
-                        ),
-                      ),
-                    );
-                  }
-                },
-              ),
-            ),
-            const SizedBox(width: AppSpacing.sm),
-            Expanded(
-              child: _ActionButton(
-                icon: Icons.person_add_outlined,
-                label: 'Edit Interests',
-                onTap: () async {
-                  // Navigate directly to profile setup page to edit interests
-                  await Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => ProfileSetupPage(profile: profile),
-                    ),
-                  );
-                },
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  /// Discover section - Shows auto-matched students nearby
-  Widget _buildDiscoverSection(BuildContext context, UserProfile profile) {
-    // TODO: Fetch nearby users with similar interests from Firestore
-    // Query: users within geohash radius + matching interests
-    final hasInterests = profile.interests.isNotEmpty;
-    final hasLocation = profile.location?.isVisible ?? false;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Students Near You',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                Text(
-                  'Auto-matched by interests',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).brightness == Brightness.light
-                        ? AppColors.textSecondaryLight
-                        : AppColors.textSecondaryDark,
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-        const SizedBox(height: AppSpacing.sm),
-
-        // Show appropriate state
-        if (!hasLocation)
-          AppCard(
-            child: EmptyState(
-              icon: Icons.location_off_outlined,
-              title: 'Location sharing is off',
-              message:
-                  'Enable location sharing to discover students studying nearby!',
-              actionLabel: 'Enable Location',
-              onAction: () async {
-                // Navigate directly to profile setup to enable location
-                await Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => ProfileSetupPage(profile: profile),
-                  ),
-                );
-              },
-            ),
-          )
-        else if (!hasInterests)
-          AppCard(
-            child: EmptyState(
-              icon: Icons.interests_outlined,
-              title: 'Add your interests',
-              message:
-                  'Tell us what you\'re passionate about to find students with similar interests!',
-              actionLabel: 'Add Interests',
-              onAction: () async {
-                // Navigate directly to profile setup to add interests
-                await Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => ProfileSetupPage(profile: profile),
-                  ),
-                );
-              },
-            ),
-          )
-        else
-          // Show real matched students (excluding mutual matches)
-          StreamBuilder<List<ProximityMatch>>(
-            stream: ProximityService.instance.watchNearbyMatches(profile),
-            builder: (context, proximitySnapshot) {
-              if (proximitySnapshot.connectionState ==
-                  ConnectionState.waiting) {
-                return AppCard(
-                  padding: AppSpacing.lg,
-                  child: Column(
-                    children: [
-                      const CircularProgressIndicator(),
-                      const SizedBox(height: AppSpacing.md),
-                      Text(
-                        'Finding nearby students...',
-                        style: Theme.of(context).textTheme.titleMedium,
-                        textAlign: TextAlign.center,
-                      ),
-                    ],
-                  ),
-                );
-              }
-
-              // Get mutual matches to filter them out
-              return StreamBuilder<List<MutualMatch>>(
-                stream: WaveService.instance.watchMutualMatches(profile.uid),
-                builder: (context, mutualSnapshot) {
-                  final proximityMatches = proximitySnapshot.data ?? [];
-                  final mutualMatches = mutualSnapshot.data ?? [];
-
-                  // Create a set of mutual match user IDs for O(1) lookup
-                  final mutualUserIds = mutualMatches
-                      .map((m) => m.getOtherUserId(profile.uid))
-                      .toSet();
-
-                  // Filter out mutual matches from proximity matches
-                  final matches = proximityMatches
-                      .where(
-                        (match) =>
-                            !mutualUserIds.contains(match.userProfile.uid),
-                      )
-                      .toList();
-
-                  if (matches.isEmpty) {
-                    return AppCard(
-                      padding: AppSpacing.lg,
-                      child: Column(
-                        children: [
-                          Icon(
-                            Icons.search_off,
-                            size: 64,
-                            color: AppColors.primary.withValues(alpha: 0.3),
-                          ),
-                          const SizedBox(height: AppSpacing.md),
-                          Text(
-                            'No nearby matches found',
-                            style: Theme.of(context).textTheme.titleMedium,
-                            textAlign: TextAlign.center,
-                          ),
-                          const SizedBox(height: AppSpacing.xs),
-                          Text(
-                            'Try refreshing your location or adding more interests',
-                            style: Theme.of(context).textTheme.bodySmall,
-                            textAlign: TextAlign.center,
-                          ),
-                          const SizedBox(height: AppSpacing.md),
-                          FilledButton.icon(
-                            onPressed: () async {
-                              await LocationService.instance.refreshLocation();
-                            },
-                            icon: const Icon(Icons.refresh),
-                            label: const Text('Refresh Location'),
-                          ),
-                          if (kDebugMode) ...[
-                            const SizedBox(height: AppSpacing.sm),
-                            FilledButton.icon(
-                              onPressed: () async {
-                                final messenger = ScaffoldMessenger.of(context);
-                                final matches = await ProximityService.instance
-                                    .refreshMatches(profile);
-                                if (context.mounted) {
-                                  messenger.showSnackBar(
-                                    SnackBar(
-                                      content: Text(
-                                        'Test: Found ${matches.length} matches',
-                                      ),
-                                    ),
-                                  );
-                                }
-                              },
-                              icon: const Icon(Icons.bug_report),
-                              label: const Text('Test Search'),
-                            ),
-                          ],
-                        ],
-                      ),
-                    );
-                  }
-
-                  return Column(
-                    children: [
-                      for (final match in matches.take(3)) // Show top 3 matches
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-                          child: _buildMatchCard(context, match, profile),
-                        ),
-                      if (matches.length > 3)
-                        TextButton(
-                          onPressed: () {
-                            // TODO: Navigate to full matches list
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  '${matches.length - 3} more matches available',
-                                ),
-                              ),
-                            );
-                          },
-                          child: Text(
-                            'View ${matches.length - 3} more matches',
-                          ),
-                        ),
-                    ],
-                  );
-                },
-              );
-            },
-          ),
-      ],
-    );
-  }
-
-  /// Build a match card for displaying a proximity match
-  Widget _buildMatchCard(
-    BuildContext context,
-    ProximityMatch match,
-    UserProfile currentUserProfile,
-  ) {
-    final user = match.userProfile;
-    final currentUser = FirebaseAuth.instance.currentUser;
-
-    if (currentUser == null) {
-      return const SizedBox.shrink();
-    }
-
-    return AppCard(
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.md),
-        child: Row(
-          children: [
-            // Avatar
-            CircleAvatar(
-              radius: 24,
-              backgroundImage: user.photoUrl != null
-                  ? NetworkImage(user.photoUrl!)
-                  : null,
-              child: user.photoUrl == null
-                  ? const Icon(Icons.person, size: 24)
-                  : null,
-            ),
-            const SizedBox(width: AppSpacing.md),
-
-            // User info
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    user.displayName ?? 'Student',
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.location_on,
-                        size: 12,
-                        color: AppColors.textSecondaryLight,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        match.formattedDistance,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: AppColors.textSecondaryLight,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Icon(
-                        Icons.interests,
-                        size: 12,
-                        color: AppColors.textSecondaryLight,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        '${match.matchPercentage}% match',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: AppColors.textSecondaryLight,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  // Common interests (Bumble 2024 best practice: show 4 + count)
-                  // Tappable to expand and see all interests
-                  GestureDetector(
-                    onTap: match.commonInterests.length > 4
-                        ? () => _showAllInterests(context, match)
-                        : null,
-                    child: Wrap(
-                      spacing: 4,
-                      runSpacing: 2,
-                      children: [
-                        // Show first 4 interests
-                        ...match.commonInterests.take(4).map((interest) {
-                          return Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 6,
-                              vertical: 2,
-                            ),
-                            decoration: BoxDecoration(
-                              color: AppColors.primary.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Text(
-                              interest,
-                              style: Theme.of(context).textTheme.bodySmall
-                                  ?.copyWith(
-                                    color: AppColors.primary,
-                                    fontSize: 10,
-                                  ),
-                            ),
-                          );
-                        }),
-                        // Add "+X more" badge if there are more than 4 interests
-                        if (match.commonInterests.length > 4)
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 6,
-                              vertical: 2,
-                            ),
-                            decoration: BoxDecoration(
-                              color: AppColors.primary.withValues(alpha: 0.15),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  '+${match.commonInterests.length - 4} more',
-                                  style: Theme.of(context).textTheme.bodySmall
-                                      ?.copyWith(
-                                        color: AppColors.primary,
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                ),
-                                const SizedBox(width: 2),
-                                Icon(
-                                  Icons.arrow_forward_ios,
-                                  size: 8,
-                                  color: AppColors.primary,
-                                ),
-                              ],
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                  // Vibe tags - show common personality tags
-                  if (currentUserProfile.vibeTags.isNotEmpty &&
-                      user.vibeTags.isNotEmpty) ...[
-                    const SizedBox(height: 6),
-                    Builder(
-                      builder: (context) {
-                        final commonVibeTags = VibeTags.getCommonTags(
-                          currentUserProfile.vibeTags,
-                          user.vibeTags,
-                        );
-                        if (commonVibeTags.isEmpty) {
-                          return const SizedBox.shrink();
-                        }
-
-                        return Row(
-                          children: [
-                            Text(
-                              '✨',
-                              style: Theme.of(context).textTheme.bodySmall,
-                            ),
-                            const SizedBox(width: 4),
-                            Expanded(
-                              child: Text(
-                                commonVibeTags
-                                    .take(3)
-                                    .map((tag) => tag.displayText)
-                                    .join(' • '),
-                                style: Theme.of(context).textTheme.bodySmall
-                                    ?.copyWith(
-                                      color: AppColors.secondary,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
-                        );
-                      },
-                    ),
-                  ],
-                ],
-              ),
-            ),
-
-            // Wave/Chat button - check mutual match status
-            FutureBuilder<bool>(
-              future: WaveService.instance.checkMutualMatch(
-                currentUser.uid,
-                user.uid,
-              ),
-              builder: (context, snapshot) {
-                // Debug logging
-                if (snapshot.hasError) {
-                  debugPrint(
-                    '❌ Error checking mutual match: ${snapshot.error}',
-                  );
-                }
-                if (snapshot.hasData) {
-                  debugPrint(
-                    '🔍 Mutual match check for ${user.displayName}: ${snapshot.data}',
-                  );
-                }
-
-                final hasMutualMatch = snapshot.data ?? false;
-
-                if (hasMutualMatch) {
-                  // Both waved - show chat button
-                  return IconButton(
-                    onPressed: () async {
-                      await ChatUtils.startConversationWith(context, user.uid);
-                    },
-                    icon: const Icon(Icons.chat_bubble),
-                    tooltip: 'Start conversation',
-                    color: AppColors.primary,
-                  );
-                } else {
-                  // No mutual match yet - show wave button
-                  return FutureBuilder<WaveRequest?>(
-                    future: WaveService.instance.getWaveTo(
-                      currentUser.uid,
-                      user.uid,
-                    ),
-                    builder: (context, waveSnapshot) {
-                      final existingWave = waveSnapshot.data;
-
-                      if (existingWave != null &&
-                          existingWave.status == WaveStatus.pending) {
-                        // Already waved - show pending state
-                        return IconButton(
-                          onPressed: null,
-                          icon: const Icon(Icons.back_hand),
-                          tooltip: 'Wave sent',
-                          color: AppColors.textSecondaryLight,
-                        );
-                      } else {
-                        // Can wave - show wave button
-                        return IconButton(
-                          onPressed: () async {
-                            await _handleWave(context, currentUser.uid, user);
-                          },
-                          icon: const Icon(Icons.back_hand_outlined),
-                          tooltip: 'Wave to connect',
-                          color: AppColors.primary,
-                        );
-                      }
-                    },
-                  );
-                }
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// Handle sending a wave to another user
-  Future<void> _handleWave(
-    BuildContext context,
-    String currentUserId,
-    UserProfile otherUser,
-  ) async {
-    try {
-      // Get current user profile
-      final currentUserProfile = await ProfileService.instance.getProfile(
-        currentUserId,
-      );
-      if (currentUserProfile == null) {
-        throw Exception('Could not load your profile');
-      }
-
-      // Create profile maps
-      final currentUserProfileMap = {
-        'displayName': currentUserProfile.displayName,
-        'photoUrl': currentUserProfile.photoUrl,
-      };
-
-      final otherUserProfileMap = {
-        'displayName': otherUser.displayName,
-        'photoUrl': otherUser.photoUrl,
-      };
-
-      // Send wave
-      final waveId = await WaveService.instance.sendWave(
-        senderId: currentUserId,
-        receiverId: otherUser.uid,
-        senderProfile: currentUserProfileMap,
-        receiverProfile: otherUserProfileMap,
-      );
-
-      if (waveId != null && context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Wave sent to ${otherUser.displayName ?? "student"}!',
-            ),
-            backgroundColor: AppColors.success,
-            duration: const Duration(seconds: 2),
-          ),
-        );
-      } else if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('You already waved at this person'),
-            duration: Duration(seconds: 2),
-          ),
-        );
-      }
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to send wave: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
-
-  /// Show all common interests in a bottom sheet (LinkedIn/Bumble pattern)
-  void _showAllInterests(BuildContext context, ProximityMatch match) {
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) => Container(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header
-            Row(
-              children: [
-                CircleAvatar(
-                  radius: 20,
-                  backgroundImage: match.userProfile.photoUrl != null
-                      ? NetworkImage(match.userProfile.photoUrl!)
-                      : null,
-                  child: match.userProfile.photoUrl == null
-                      ? const Icon(Icons.person, size: 20)
-                      : null,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Common interests with ${match.userProfile.displayName}',
-                        style: Theme.of(context).textTheme.titleMedium
-                            ?.copyWith(fontWeight: FontWeight.w600),
-                      ),
-                      Text(
-                        '${match.commonInterests.length} shared interests',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: AppColors.textSecondaryLight,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.close),
-                  onPressed: () => Navigator.pop(context),
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
-            const Divider(),
-            const SizedBox(height: 16),
-            // All interests in a grid
-            Flexible(
-              child: SingleChildScrollView(
-                child: Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: match.commonInterests.map((interest) {
-                    return Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 8,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppColors.primary.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: AppColors.primary.withValues(alpha: 0.2),
-                        ),
-                      ),
-                      child: Text(
-                        interest,
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: AppColors.primary,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    );
-                  }).toList(),
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// Tips card - Helpful hints about how the app works
-  Widget _buildTipsCard(BuildContext context) {
-    return AppCard(
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(AppSpacing.sm),
-            decoration: BoxDecoration(
-              color: AppColors.info.withValues(alpha: 0.1),
-              borderRadius: AppSpacing.borderRadiusSm,
-            ),
-            child: Icon(
-              Icons.info_outline,
-              color: AppColors.info,
-              size: AppSpacing.iconLg,
-            ),
-          ),
-          const SizedBox(width: AppSpacing.md),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'How it works',
-                  style: Theme.of(
-                    context,
-                  ).textTheme.titleSmall?.copyWith(color: AppColors.info),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Common Grounds automatically finds students nearby with similar interests. You\'ll get notified when there\'s a potential match!',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ],
+            'Nearby',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: AppColors.secondary,
             ),
           ),
         ],
@@ -968,88 +161,216 @@ class HomePage extends StatelessWidget {
   }
 }
 
-/// Stat card widget
-class _StatCard extends StatelessWidget {
-  const _StatCard({
-    required this.icon,
-    required this.label,
-    required this.value,
-    this.sublabel,
-    required this.color,
+class _PublicProfile extends StatelessWidget {
+  const _PublicProfile({
+    required this.profile,
+    required this.waveSent,
+    required this.isSending,
+    required this.onWave,
   });
 
-  final IconData icon;
-  final String label;
-  final String value;
-  final String? sublabel;
-  final Color color;
+  final DiscoverProfile profile;
+  final bool waveSent;
+  final bool isSending;
+  final VoidCallback? onWave;
 
   @override
   Widget build(BuildContext context) {
-    return AppCard(
-      padding: AppSpacing.sm,
-      child: Column(
-        children: [
-          Icon(icon, color: color, size: AppSpacing.iconMd),
-          const SizedBox(height: AppSpacing.xs),
-          Text(
-            value,
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-              color: color,
-              fontWeight: FontWeight.bold,
+    final person = profile.profile;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(28),
+          child: AspectRatio(
+            aspectRatio: .83,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                Image.asset(
+                  'assets/images/eren_editorial_portrait.png',
+                  fit: BoxFit.cover,
+                ),
+                const DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [Colors.transparent, Color(0x660D0908)],
+                    ),
+                  ),
+                ),
+                Positioned(
+                  left: 18,
+                  right: 18,
+                  bottom: 17,
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: const BoxDecoration(
+                          color: Color(0xFFCFD69F),
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 7),
+                      Text(
+                        profile.distanceLabel,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
+        ),
+        const SizedBox(height: 22),
+        Text(
+          '${person.displayName}, ${profile.age}',
+          style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+            fontWeight: FontWeight.w600,
+            letterSpacing: -.6,
+          ),
+        ),
+        const SizedBox(height: 12),
+        _SharedContext(
+          label: profile.compatibilityLabel,
+          interests: profile.sharedInterests,
+        ),
+        const SizedBox(height: 21),
+        Text(
+          person.bio!,
+          style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+            height: 1.5,
+            color: AppColors.textPrimaryLight,
+          ),
+        ),
+        const SizedBox(height: 26),
+        Text(
+          'A few things Eren is into',
+          style: Theme.of(
+            context,
+          ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+        ),
+        const SizedBox(height: 11),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: person.interests
+              .map(
+                (interest) => _InterestChip(
+                  label: interest,
+                  shared: profile.sharedInterests.contains(interest),
+                ),
+              )
+              .toList(),
+        ),
+        const SizedBox(height: 30),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: OutlinedButton.icon(
+            onPressed: onWave,
+            icon: isSending
+                ? const SizedBox.square(
+                    dimension: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : Icon(
+                    waveSent ? Icons.check_rounded : Icons.waving_hand_outlined,
+                    size: 18,
+                  ),
+            label: Text(waveSent ? 'Wave sent' : 'Wave'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: waveSent
+                  ? AppColors.textSecondaryLight
+                  : AppColors.primary,
+              side: BorderSide(
+                color: waveSent ? AppColors.borderLight : AppColors.primary,
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(24),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 14),
+        Text(
+          'A wave is a simple hello. Messaging opens only if it’s mutual.',
+          style: Theme.of(
+            context,
+          ).textTheme.bodySmall?.copyWith(color: AppColors.textSecondaryLight),
+        ),
+      ],
+    );
+  }
+}
+
+class _SharedContext extends StatelessWidget {
+  const _SharedContext({required this.label, required this.interests});
+  final String label;
+  final List<String> interests;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(15),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF4ECE6),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
           Text(
             label,
-            style: Theme.of(
-              context,
-            ).textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w600),
-            textAlign: TextAlign.center,
-          ),
-          if (sublabel != null)
-            Text(
-              sublabel!,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                fontSize: 10,
-                color: Theme.of(context).brightness == Brightness.light
-                    ? AppColors.textSecondaryLight
-                    : AppColors.textSecondaryDark,
-              ),
-              textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+              color: AppColors.secondary,
+              fontWeight: FontWeight.w600,
             ),
+          ),
+          const SizedBox(height: 5),
+          Text(
+            'Especially ${interests.join(', ').toLowerCase()}.',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: AppColors.textSecondaryLight,
+            ),
+          ),
         ],
       ),
     );
   }
 }
 
-/// Action button widget
-class _ActionButton extends StatelessWidget {
-  const _ActionButton({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-  });
-
-  final IconData icon;
+class _InterestChip extends StatelessWidget {
+  const _InterestChip({required this.label, required this.shared});
   final String label;
-  final VoidCallback onTap;
+  final bool shared;
 
   @override
   Widget build(BuildContext context) {
-    return AppCard(
-      onTap: onTap,
-      padding: AppSpacing.md,
-      child: Column(
-        children: [
-          Icon(icon, color: AppColors.primary, size: AppSpacing.iconLg),
-          const SizedBox(height: AppSpacing.xs),
-          Text(
-            label,
-            style: Theme.of(context).textTheme.bodySmall,
-            textAlign: TextAlign.center,
-          ),
-        ],
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: shared ? const Color(0xFFF4E3DB) : AppColors.surfaceVariantLight,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: shared ? const Color(0xFFE8C9BB) : AppColors.borderLight,
+        ),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 13,
+          color: shared ? AppColors.primaryDark : AppColors.textSecondaryLight,
+          fontWeight: shared ? FontWeight.w600 : FontWeight.w500,
+        ),
       ),
     );
   }
