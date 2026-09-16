@@ -130,6 +130,7 @@ class ProximityService {
             userProfile,
             distance,
           );
+          if (!_meetsDiscoverThreshold(distance, matchScore)) continue;
 
           matches.add(
             ProximityMatch(
@@ -179,8 +180,9 @@ class ProximityService {
               userProfile.location!.longitude!,
             );
 
-            // Filter by distance (more lenient for broad search)
-            if (distance > searchRadius * 2) continue;
+            // A broader query may improve recall, but never expands a person's
+            // selected radius or exposes a less-nearby profile.
+            if (distance > searchRadius) continue;
 
             // OPTIMIZED: Fast interest matching using sets
             final commonInterests = _getCommonInterestsOptimized(
@@ -197,6 +199,7 @@ class ProximityService {
               userProfile,
               distance,
             );
+            if (!_meetsDiscoverThreshold(distance, matchScore)) continue;
 
             matches.add(
               ProximityMatch(
@@ -237,6 +240,21 @@ class ProximityService {
       debugPrint('Error finding nearby matches: $e');
       return [];
     }
+  }
+
+  /// Applies the product's distance-aware compatibility rule. Thresholds stay
+  /// deliberately local and tunable until product validation sets final values.
+  bool _meetsDiscoverThreshold(double distanceKm, double compatibility) {
+    const milesPerKilometer = 0.621371;
+    final miles = distanceKm * milesPerKilometer;
+    final requiredCompatibility = switch (miles) {
+      < 0.1 => 0.80,
+      < 0.3 => 0.85,
+      < 0.5 => 0.90,
+      <= 1.0 => 0.95,
+      _ => 1.1,
+    };
+    return compatibility >= requiredCompatibility;
   }
 
   /// Get nearby geohashes for proximity search - OPTIMIZED

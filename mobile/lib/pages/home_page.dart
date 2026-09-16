@@ -3,12 +3,14 @@
 library;
 
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../core/theme/app_colors.dart';
 import '../data/discover_profiles.dart';
 import '../models/user_profile.dart';
 import '../services/profile_service.dart';
+import '../services/proximity_service.dart';
 import '../services/wave_service.dart';
 
 class HomePage extends StatefulWidget {
@@ -34,49 +36,86 @@ class _HomePageState extends State<HomePage> {
     return StreamBuilder<UserProfile?>(
       stream: ProfileService.instance.watchProfile(user.uid),
       builder: (context, snapshot) {
+        final viewer = snapshot.data;
         return Scaffold(
           body: SafeArea(
-            child: CustomScrollView(
-              slivers: [
-                SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(24, 18, 24, 40),
-                  sliver: SliverList(
-                    delegate: SliverChildListDelegate([
-                      const _DiscoverHeader(),
-                      const SizedBox(height: 30),
-                      _PublicProfile(
-                        profile: erenDiscoverProfile,
-                        waveSent: _waveSent,
-                        isSending: _isSendingWave,
-                        onWave: snapshot.data == null
-                            ? null
-                            : () => _sendWave(snapshot.data!),
-                      ),
-                    ]),
+            child: viewer == null
+                ? const Center(child: CircularProgressIndicator())
+                : StreamBuilder<List<ProximityMatch>>(
+                    stream: ProximityService.instance.watchNearbyMatches(
+                      viewer,
+                    ),
+                    builder: (context, matchesSnapshot) {
+                      final profile = _discoverProfileFor(matchesSnapshot.data);
+                      return CustomScrollView(
+                        slivers: [
+                          SliverPadding(
+                            padding: const EdgeInsets.fromLTRB(24, 18, 24, 40),
+                            sliver: SliverList(
+                              delegate: SliverChildListDelegate([
+                                const _DiscoverHeader(),
+                                const SizedBox(height: 30),
+                                if (profile != null)
+                                  _PublicProfile(
+                                    profile: profile,
+                                    waveSent: _waveSent,
+                                    isSending: _isSendingWave,
+                                    onWave:
+                                        profile.profile.uid ==
+                                            erenDiscoverProfile.profile.uid
+                                        ? null
+                                        : () => _sendWave(viewer, profile),
+                                  )
+                                else if (matchesSnapshot.hasError)
+                                  const _DiscoverState(
+                                    title: 'Discover is taking a moment',
+                                    message:
+                                        'Check your connection, then try again.',
+                                  )
+                                else if (matchesSnapshot.connectionState ==
+                                    ConnectionState.waiting)
+                                  const _DiscoverLoading()
+                                else
+                                  const _DiscoverState(
+                                    title: 'Nothing new nearby yet',
+                                    message:
+                                        'We’ll only introduce people when there’s meaningful common ground.',
+                                  ),
+                              ]),
+                            ),
+                          ),
+                        ],
+                      );
+                    },
                   ),
-                ),
-              ],
-            ),
           ),
         );
       },
     );
   }
 
-  Future<void> _sendWave(UserProfile sender) async {
+  DiscoverProfile? _discoverProfileFor(List<ProximityMatch>? matches) {
+    if (matches?.isNotEmpty == true) {
+      return DiscoverProfile.fromMatch(matches!.first);
+    }
+    // Eren remains a visual fixture only when developing without seeded data.
+    return kDebugMode && matches != null ? erenDiscoverProfile : null;
+  }
+
+  Future<void> _sendWave(UserProfile sender, DiscoverProfile recipient) async {
     if (_isSendingWave || _waveSent) return;
     setState(() => _isSendingWave = true);
 
     final id = await WaveService.instance.sendWave(
       senderId: sender.uid,
-      receiverId: erenDiscoverProfile.profile.uid,
+      receiverId: recipient.profile.uid,
       senderProfile: {
         'displayName': sender.displayName,
         'photoUrl': sender.photoUrl,
       },
       receiverProfile: {
-        'displayName': erenDiscoverProfile.profile.displayName,
-        'photoUrl': null,
+        'displayName': recipient.profile.displayName,
+        'photoUrl': recipient.profile.photoUrl,
       },
     );
 
@@ -88,7 +127,9 @@ class _HomePageState extends State<HomePage> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          id == null ? 'You already waved to Eren.' : 'Wave sent to Eren.',
+          id == null
+              ? 'You already waved to ${recipient.profile.displayName}.'
+              : 'Wave sent to ${recipient.profile.displayName}.',
         ),
       ),
     );
@@ -187,10 +228,7 @@ class _PublicProfile extends StatelessWidget {
             child: Stack(
               fit: StackFit.expand,
               children: [
-                Image.asset(
-                  'assets/images/eren_editorial_portrait.png',
-                  fit: BoxFit.cover,
-                ),
+                _ProfilePhoto(profile: profile),
                 const DecoratedBox(
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
@@ -232,7 +270,10 @@ class _PublicProfile extends StatelessWidget {
         ),
         const SizedBox(height: 22),
         Text(
-          '${person.displayName}, ${profile.age}',
+          [
+            person.displayName,
+            if (profile.age != null) '${profile.age}',
+          ].whereType<String>().join(', '),
           style: Theme.of(context).textTheme.headlineMedium?.copyWith(
             fontWeight: FontWeight.w600,
             letterSpacing: -.6,
@@ -308,6 +349,76 @@ class _PublicProfile extends StatelessWidget {
           ).textTheme.bodySmall?.copyWith(color: AppColors.textSecondaryLight),
         ),
       ],
+    );
+  }
+}
+
+class _ProfilePhoto extends StatelessWidget {
+  const _ProfilePhoto({required this.profile});
+
+  final DiscoverProfile profile;
+
+  @override
+  Widget build(BuildContext context) {
+    final imageUrl = profile.profile.photoUrl;
+    if (imageUrl == null || imageUrl.isEmpty) {
+      return Image.asset(
+        'assets/images/eren_editorial_portrait.png',
+        fit: BoxFit.cover,
+      );
+    }
+    return Image.network(
+      imageUrl,
+      fit: BoxFit.cover,
+      errorBuilder: (_, error, stackTrace) => Image.asset(
+        'assets/images/eren_editorial_portrait.png',
+        fit: BoxFit.cover,
+      ),
+    );
+  }
+}
+
+class _DiscoverLoading extends StatelessWidget {
+  const _DiscoverLoading();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Padding(
+      padding: EdgeInsets.only(top: 80),
+      child: Center(child: CircularProgressIndicator()),
+    );
+  }
+}
+
+class _DiscoverState extends StatelessWidget {
+  const _DiscoverState({required this.title, required this.message});
+
+  final String title;
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 80),
+      child: Column(
+        children: [
+          Icon(
+            Icons.explore_outlined,
+            size: 38,
+            color: AppColors.textSecondaryLight,
+          ),
+          const SizedBox(height: 16),
+          Text(title, style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 8),
+          Text(
+            message,
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: AppColors.textSecondaryLight,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
