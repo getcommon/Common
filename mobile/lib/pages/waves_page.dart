@@ -1,102 +1,157 @@
-/// Activity collects only meaningful connection updates: incoming waves and
-/// mutual connections. Sent waves stay intentionally quiet on Discover.
+/// Activity keeps only the meaningful next steps: received waves and
+/// conversations opened by a mutual wave. Sent waves stay quietly on Discover.
 library;
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../core/theme/app_colors.dart';
+import '../models/chat_models.dart';
 import '../models/wave_models.dart';
+import '../services/chat_service.dart';
 import '../services/wave_service.dart';
 import '../utils/chat_utils.dart';
 
-class WavesPage extends StatelessWidget {
-  const WavesPage({super.key});
+class ActivityPage extends StatelessWidget {
+  const ActivityPage({super.key});
 
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
-      return const Center(child: Text('Sign in to see your activity.'));
+      return const Center(child: Text('Sign in to see activity.'));
     }
 
     return Scaffold(
       body: SafeArea(
         child: StreamBuilder<List<WaveRequest>>(
           stream: WaveService.instance.watchIncomingWaves(user.uid),
-          builder: (context, wavesSnapshot) {
-            return StreamBuilder<List<MutualMatch>>(
-              stream: WaveService.instance.watchMutualMatches(user.uid),
-              builder: (context, matchesSnapshot) {
-                if (wavesSnapshot.connectionState == ConnectionState.waiting ||
-                    matchesSnapshot.connectionState ==
-                        ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-
-                final waves = wavesSnapshot.data ?? const <WaveRequest>[];
-                final matches = matchesSnapshot.data ?? const <MutualMatch>[];
-                return CustomScrollView(
-                  slivers: [
-                    SliverPadding(
-                      padding: const EdgeInsets.fromLTRB(24, 18, 24, 40),
-                      sliver: SliverList(
-                        delegate: SliverChildListDelegate([
-                          Text(
-                            'Activity',
-                            style: Theme.of(context).textTheme.displaySmall
-                                ?.copyWith(
-                                  fontWeight: FontWeight.w600,
-                                  letterSpacing: -1.1,
+          builder: (context, waveSnapshot) => StreamBuilder<List<MutualMatch>>(
+            stream: WaveService.instance.watchMutualMatches(user.uid),
+            builder: (context, connectionSnapshot) {
+              final waves = waveSnapshot.data ?? const <WaveRequest>[];
+              final connections =
+                  connectionSnapshot.data ?? const <MutualMatch>[];
+              final loading =
+                  waveSnapshot.connectionState == ConnectionState.waiting ||
+                  connectionSnapshot.connectionState == ConnectionState.waiting;
+              return StreamBuilder<List<Conversation>>(
+                stream: ChatService.instance.watchUserConversations(user.uid),
+                builder: (context, conversationsSnapshot) {
+                  final conversations =
+                      conversationsSnapshot.data ?? const <Conversation>[];
+                  final activityLoading =
+                      loading ||
+                      conversationsSnapshot.connectionState ==
+                          ConnectionState.waiting;
+                  return CustomScrollView(
+                    slivers: [
+                      SliverPadding(
+                        padding: const EdgeInsets.fromLTRB(24, 18, 24, 40),
+                        sliver: SliverList(
+                          delegate: SliverChildListDelegate([
+                            const _ActivityHeader(),
+                            const SizedBox(height: 38),
+                            if (activityLoading)
+                              const _ActivityLoading()
+                            else if (waves.isEmpty && connections.isEmpty)
+                              const _ActivityEmptyState()
+                            else ...[
+                              if (waves.isNotEmpty) ...[
+                                _SectionHeading(
+                                  label: 'Waiting for you',
+                                  detail: _countLabel(waves.length, 'wave'),
                                 ),
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            'The people you’ve made a little room for.',
-                            style: Theme.of(context).textTheme.bodyLarge
-                                ?.copyWith(color: AppColors.textSecondaryLight),
-                          ),
-                          const SizedBox(height: 32),
-                          if (matches.isNotEmpty) ...[
-                            const _SectionHeading('Connections'),
-                            const SizedBox(height: 12),
-                            ...matches.map(
-                              (match) => _ConnectionRow(
-                                match: match,
-                                currentUserId: user.uid,
-                              ),
-                            ),
-                            const SizedBox(height: 30),
-                          ],
-                          if (waves.isNotEmpty) ...[
-                            const _SectionHeading('Waves for you'),
-                            const SizedBox(height: 12),
-                            ...waves.map(
-                              (wave) => _IncomingWaveRow(
-                                wave: wave,
-                                onAccept: () => _acceptWave(context, wave),
-                                onDecline: () => _declineWave(context, wave),
-                              ),
-                            ),
-                          ],
-                          if (matches.isEmpty && waves.isEmpty)
-                            const _ActivityEmptyState(),
-                        ]),
+                                const SizedBox(height: 15),
+                                ..._withDividers(
+                                  waves.map(
+                                    (wave) => _IncomingWaveEntry(
+                                      wave: wave,
+                                      onAccept: () =>
+                                          _acceptWave(context, wave),
+                                      onDecline: () =>
+                                          _declineWave(context, wave),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 34),
+                              ],
+                              if (connections.isNotEmpty) ...[
+                                _SectionHeading(
+                                  label: 'New connections',
+                                  detail: _countLabel(
+                                    connections.length,
+                                    'connection',
+                                  ),
+                                ),
+                                const SizedBox(height: 15),
+                                ..._withDividers(
+                                  connections.map(
+                                    (connection) => _ConnectionEntry(
+                                      connection: connection,
+                                      currentUserId: user.uid,
+                                      conversationStarted: _hasConversationWith(
+                                        conversations,
+                                        user.uid,
+                                        connection.getOtherUserId(user.uid),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                              const SizedBox(height: 28),
+                              const _PrivacyNote(),
+                            ],
+                          ]),
+                        ),
                       ),
-                    ),
-                  ],
-                );
-              },
-            );
-          },
+                    ],
+                  );
+                },
+              );
+            },
+          ),
         ),
       ),
     );
   }
 
+  static String _countLabel(int count, String noun) =>
+      '$count $noun${count == 1 ? '' : 's'}';
+
+  static bool _hasConversationWith(
+    List<Conversation> conversations,
+    String currentUserId,
+    String otherUserId,
+  ) => conversations.any(
+    (conversation) =>
+        conversation.participantIds.contains(currentUserId) &&
+        conversation.participantIds.contains(otherUserId),
+  );
+
+  static Iterable<Widget> _withDividers(Iterable<Widget> entries) sync* {
+    var first = true;
+    for (final entry in entries) {
+      if (!first) {
+        yield const Padding(
+          padding: EdgeInsets.only(left: 65),
+          child: Divider(height: 1),
+        );
+      }
+      first = false;
+      yield entry;
+    }
+  }
+
   Future<void> _acceptWave(BuildContext context, WaveRequest wave) async {
     final matchId = await WaveService.instance.acceptWave(wave.id);
-    if (!context.mounted || matchId == null) return;
+    if (!context.mounted) return;
+    if (matchId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('That wave is no longer available.')),
+      );
+      return;
+    }
     final name = wave.senderProfile['displayName'] as String? ?? 'them';
     await showModalBottomSheet<void>(
       context: context,
@@ -108,37 +163,28 @@ class WavesPage extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'You and $name are connected.',
-              style: Theme.of(
-                sheetContext,
-              ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w600),
+              'You and $name can talk now.',
+              style: Theme.of(sheetContext).textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.w600,
+                letterSpacing: -.4,
+              ),
             ),
             const SizedBox(height: 10),
             Text(
-              'Start with a simple hello whenever it feels right.',
+              'There’s no rush. A simple hello is enough when it feels right.',
               style: Theme.of(sheetContext).textTheme.bodyLarge?.copyWith(
                 color: AppColors.textSecondaryLight,
+                height: 1.45,
               ),
             ),
-            const SizedBox(height: 24),
-            OutlinedButton.icon(
+            const SizedBox(height: 22),
+            TextButton.icon(
               onPressed: () async {
                 Navigator.of(sheetContext).pop();
                 await ChatUtils.startConversationWith(context, wave.senderId);
               },
-              icon: const Icon(Icons.chat_bubble_outline, size: 18),
-              label: const Text('Start conversation'),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: AppColors.primary,
-                side: const BorderSide(color: AppColors.primary),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 18,
-                  vertical: 12,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(24),
-                ),
-              ),
+              icon: const Icon(Icons.arrow_forward_rounded, size: 18),
+              label: const Text('Start a conversation'),
             ),
           ],
         ),
@@ -148,33 +194,83 @@ class WavesPage extends StatelessWidget {
 
   Future<void> _declineWave(BuildContext context, WaveRequest wave) async {
     final declined = await WaveService.instance.declineWave(wave.id);
-    if (!context.mounted || !declined) return;
+    if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Wave removed from your activity.')),
+      SnackBar(
+        content: Text(
+          declined
+              ? 'Removed from your activity.'
+              : 'That wave is no longer available.',
+        ),
+      ),
     );
   }
 }
 
-class _SectionHeading extends StatelessWidget {
-  const _SectionHeading(this.label);
-  final String label;
+/// Compatibility name for callers that still refer to the former screen.
+@Deprecated('Use ActivityPage instead.')
+class WavesPage extends ActivityPage {
+  const WavesPage({super.key});
+}
+
+class _ActivityHeader extends StatelessWidget {
+  const _ActivityHeader();
 
   @override
-  Widget build(BuildContext context) => Text(
-    label,
-    style: Theme.of(
-      context,
-    ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(
+        'Activity',
+        style: Theme.of(context).textTheme.displaySmall?.copyWith(
+          fontWeight: FontWeight.w600,
+          letterSpacing: -1.1,
+        ),
+      ),
+      const SizedBox(height: 7),
+      Text(
+        'Small openings for friendship, in one place.',
+        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+          color: AppColors.textSecondaryLight,
+          height: 1.4,
+        ),
+      ),
+    ],
   );
 }
 
-class _IncomingWaveRow extends StatelessWidget {
-  const _IncomingWaveRow({
+class _SectionHeading extends StatelessWidget {
+  const _SectionHeading({required this.label, required this.detail});
+  final String label;
+  final String detail;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    children: [
+      Text(
+        label,
+        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+          fontWeight: FontWeight.w600,
+          letterSpacing: -.2,
+        ),
+      ),
+      const SizedBox(width: 9),
+      Text(
+        detail,
+        style: Theme.of(
+          context,
+        ).textTheme.labelMedium?.copyWith(color: AppColors.textSecondaryLight),
+      ),
+    ],
+  );
+}
+
+class _IncomingWaveEntry extends StatelessWidget {
+  const _IncomingWaveEntry({
     required this.wave,
     required this.onAccept,
     required this.onDecline,
   });
-
   final WaveRequest wave;
   final VoidCallback onAccept;
   final VoidCallback onDecline;
@@ -183,138 +279,193 @@ class _IncomingWaveRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final name = wave.senderProfile['displayName'] as String? ?? 'Someone';
     final photo = wave.senderProfile['photoUrl'] as String?;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 20),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _ActivityAvatar(name: name, photoUrl: photo),
-          const SizedBox(width: 13),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '$name waved to you',
-                  style: Theme.of(
-                    context,
-                  ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  wave.timeAgo,
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    OutlinedButton(
-                      onPressed: onAccept,
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: AppColors.primary,
-                        side: const BorderSide(color: AppColors.primary),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 9,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                      ),
-                      child: const Text('Wave back'),
-                    ),
-                    const SizedBox(width: 8),
-                    TextButton(
-                      onPressed: onDecline,
-                      style: TextButton.styleFrom(
-                        foregroundColor: AppColors.textSecondaryLight,
-                      ),
-                      child: const Text('Not now'),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
+    return _ActivityEntry(
+      name: name,
+      photoUrl: photo,
+      title: '$name sent you a wave',
+      detail: '${wave.timeAgo} · You can take your time.',
+      actions: [
+        OutlinedButton(onPressed: onAccept, child: const Text('Wave back')),
+        TextButton(onPressed: onDecline, child: const Text('Not now')),
+      ],
     );
   }
 }
 
-class _ConnectionRow extends StatelessWidget {
-  const _ConnectionRow({required this.match, required this.currentUserId});
-  final MutualMatch match;
+class _ConnectionEntry extends StatelessWidget {
+  const _ConnectionEntry({
+    required this.connection,
+    required this.currentUserId,
+    required this.conversationStarted,
+  });
+  final MutualMatch connection;
   final String currentUserId;
+  final bool conversationStarted;
 
   @override
   Widget build(BuildContext context) {
-    final profile = match.getOtherUserProfile(currentUserId);
+    final profile = connection.getOtherUserProfile(currentUserId);
     final name = profile['displayName'] as String? ?? 'Someone';
-    final photo = profile['photoUrl'] as String?;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 20),
-      child: Row(
-        children: [
-          _ActivityAvatar(name: name, photoUrl: photo),
-          const SizedBox(width: 13),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Connected with $name',
-                  style: Theme.of(
-                    context,
-                  ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  'You can message each other now.',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ],
-            ),
+    return _ActivityEntry(
+      name: name,
+      photoUrl: profile['photoUrl'] as String?,
+      connection: true,
+      title: 'You and $name connected',
+      detail: '${_timeAgo(connection.matchedAt)} · Your conversation is open.',
+      actions: [
+        TextButton.icon(
+          onPressed: () => ChatUtils.startConversationWith(
+            context,
+            connection.getOtherUserId(currentUserId),
           ),
-          IconButton(
-            onPressed: () => ChatUtils.startConversationWith(
-              context,
-              match.getOtherUserId(currentUserId),
-            ),
-            icon: const Icon(Icons.chat_bubble_outline),
-            color: AppColors.primary,
-            tooltip: 'Start conversation',
+          icon: const Icon(Icons.arrow_forward_rounded, size: 17),
+          label: Text(conversationStarted ? 'Open conversation' : 'Say hello'),
+          style: TextButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
+
+  static String _timeAgo(DateTime timestamp) {
+    final difference = DateTime.now().difference(timestamp);
+    if (difference.inDays > 0) return '${difference.inDays}d ago';
+    if (difference.inHours > 0) return '${difference.inHours}h ago';
+    if (difference.inMinutes > 0) {
+      return '${difference.inMinutes}m ago';
+    }
+    return 'Just now';
+  }
+}
+
+class _ActivityEntry extends StatelessWidget {
+  const _ActivityEntry({
+    required this.name,
+    required this.photoUrl,
+    required this.title,
+    required this.detail,
+    required this.actions,
+    this.connection = false,
+  });
+  final String name;
+  final String? photoUrl;
+  final String title;
+  final String detail;
+  final List<Widget> actions;
+  final bool connection;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 18),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _ActivityAvatar(name: name, photoUrl: photoUrl, connection: connection),
+        const SizedBox(width: 13),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: Theme.of(
+                  context,
+                ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                detail,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: AppColors.textSecondaryLight,
+                ),
+              ),
+              const SizedBox(height: 11),
+              Wrap(spacing: 4, runSpacing: 2, children: actions),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
 }
 
 class _ActivityAvatar extends StatelessWidget {
-  const _ActivityAvatar({required this.name, this.photoUrl});
+  const _ActivityAvatar({
+    required this.name,
+    this.photoUrl,
+    this.connection = false,
+  });
   final String name;
   final String? photoUrl;
+  final bool connection;
 
   @override
   Widget build(BuildContext context) {
-    return CircleAvatar(
-      radius: 26,
-      backgroundColor: AppColors.surfaceVariantLight,
-      backgroundImage: photoUrl == null || photoUrl!.isEmpty
-          ? null
-          : NetworkImage(photoUrl!),
-      child: photoUrl == null || photoUrl!.isEmpty
-          ? Text(
-              name.substring(0, 1).toUpperCase(),
-              style: const TextStyle(
-                color: AppColors.secondary,
-                fontWeight: FontWeight.w600,
+    final hasPhoto = photoUrl?.isNotEmpty == true;
+    return Container(
+      width: 52,
+      height: 52,
+      padding: const EdgeInsets.all(2),
+      decoration: BoxDecoration(
+        color: connection
+            ? AppColors.primaryLight
+            : AppColors.surfaceVariantLight,
+        shape: BoxShape.circle,
+      ),
+      child: CircleAvatar(
+        backgroundColor: AppColors.surfaceVariantLight,
+        backgroundImage: hasPhoto ? NetworkImage(photoUrl!) : null,
+        child: hasPhoto
+            ? null
+            : Text(
+                name.substring(0, 1).toUpperCase(),
+                style: const TextStyle(
+                  color: AppColors.secondary,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
-            )
-          : null,
+      ),
     );
   }
+}
+
+class _PrivacyNote extends StatelessWidget {
+  const _PrivacyNote();
+
+  @override
+  Widget build(BuildContext context) => Row(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      const Padding(
+        padding: EdgeInsets.only(top: 2),
+        child: Icon(
+          Icons.lock_outline_rounded,
+          size: 16,
+          color: AppColors.secondary,
+        ),
+      ),
+      const SizedBox(width: 9),
+      Expanded(
+        child: Text(
+          'Conversations open only when a wave is returned. Your location stays private.',
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            color: AppColors.textSecondaryLight,
+            height: 1.4,
+          ),
+        ),
+      ),
+    ],
+  );
+}
+
+class _ActivityLoading extends StatelessWidget {
+  const _ActivityLoading();
+  @override
+  Widget build(BuildContext context) => const Padding(
+    padding: EdgeInsets.only(top: 72),
+    child: Center(child: CircularProgressIndicator()),
+  );
 }
 
 class _ActivityEmptyState extends StatelessWidget {
@@ -322,26 +473,29 @@ class _ActivityEmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(top: 88),
+    padding: const EdgeInsets.only(top: 58),
     child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(
+        const Icon(
           Icons.waving_hand_outlined,
-          size: 38,
-          color: AppColors.textSecondaryLight,
+          size: 32,
+          color: AppColors.secondary,
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 17),
         Text(
-          'A quiet start is still a start.',
-          style: Theme.of(context).textTheme.titleMedium,
-        ),
-        const SizedBox(height: 8),
-        Text(
-          'When someone waves back—or reaches out—you’ll see it here.',
-          textAlign: TextAlign.center,
+          'Nothing asking for you just yet.',
           style: Theme.of(
             context,
-          ).textTheme.bodyMedium?.copyWith(color: AppColors.textSecondaryLight),
+          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+        ),
+        const SizedBox(height: 7),
+        Text(
+          'When someone reaches out, or a wave becomes mutual, it will appear here.',
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+            color: AppColors.textSecondaryLight,
+            height: 1.45,
+          ),
         ),
       ],
     ),

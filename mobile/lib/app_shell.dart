@@ -43,7 +43,7 @@ class _AppShellState extends State<AppShell> {
             // Pass callback to navigate between tabs
             onNavigateToTab: (index) => setState(() => _currentIndex = index),
           ),
-          const WavesPage(),
+          const ActivityPage(),
           const ConversationsPage(),
           const ProfilePage(),
         ];
@@ -77,7 +77,7 @@ class _BottomNav extends StatelessWidget {
   Widget build(BuildContext context) {
     final badgeColor = Theme.of(context).colorScheme.primary;
 
-    // Watch both conversations and waves.
+    // Watch conversations and the incoming updates shown in Activity.
     return StreamBuilder<List<Conversation>>(
       stream: ChatService.instance.watchUserConversations(userId),
       builder: (context, conversationsSnapshot) {
@@ -89,7 +89,7 @@ class _BottomNav extends StatelessWidget {
           }
         }
 
-        // Watch incoming waves
+        // Activity only needs a badge for waves that still need a response.
         return StreamBuilder<List<WaveRequest>>(
           stream: WaveService.instance.watchIncomingWaves(userId),
           builder: (context, wavesSnapshot) {

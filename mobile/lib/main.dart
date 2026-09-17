@@ -7,11 +7,13 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'app_shell.dart';
 import 'firebase_options.dart';
 import 'pages/welcome_page.dart';
+import 'onboarding/onboarding_page.dart';
 import 'services/profile_service.dart';
 import 'models/user_profile.dart';
 import 'pages/profile_setup_page.dart';
 import 'services/messaging_service.dart';
 import 'services/location_service.dart';
+import 'services/local_prefs.dart';
 
 // Design system imports
 import 'core/theme/app_theme.dart';
@@ -150,8 +152,19 @@ class _BootstrapGateState extends State<BootstrapGate> {
         final user = authSnap.data;
         debugPrint('🔍 BootstrapGate: User = ${user?.uid ?? "null"}');
         if (user == null) {
-          debugPrint('🔍 BootstrapGate: No user, showing WelcomePage');
-          return const WelcomePage();
+          return FutureBuilder<bool>(
+            future: LocalPrefs.hasOnboarded(),
+            builder: (context, onboardingSnap) {
+              if (onboardingSnap.connectionState != ConnectionState.done) {
+                return const Scaffold(
+                  body: Center(child: CircularProgressIndicator()),
+                );
+              }
+              return onboardingSnap.data == true
+                  ? const WelcomePage()
+                  : const OnboardingPage();
+            },
+          );
         }
 
         // Ensure there's a profile doc, then watch it.

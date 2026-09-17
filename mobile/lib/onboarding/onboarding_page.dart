@@ -3,8 +3,7 @@ import '../services/local_prefs.dart';
 import '../core/theme/app_colors.dart';
 import '../core/theme/app_spacing.dart';
 
-/// Modern onboarding experience with 3-slide carousel
-/// Following industry best practices from Tinder, Bumble, Hinge, and Fizz
+/// A short introduction to Common's friendship-first, privacy-safe premise.
 class OnboardingPage extends StatefulWidget {
   const OnboardingPage({super.key});
 
@@ -46,7 +45,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
   Future<void> _completeOnboarding() async {
     await LocalPrefs.setOnboarded(true);
     if (!mounted) return;
-    Navigator.of(context).pushReplacementNamed('/signin');
+    Navigator.of(context).pushReplacementNamed('/welcome');
   }
 
   void _skipOnboarding() {
@@ -160,7 +159,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
                       ),
                     ),
                     child: const Text(
-                      'Get Started',
+                      'Continue',
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w600,
@@ -177,7 +176,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
   }
 }
 
-// Slide 1: Find Your People
+// Slide 1: Common ground
 class _Slide1FindYourPeople extends StatelessWidget {
   const _Slide1FindYourPeople();
 
@@ -187,16 +186,17 @@ class _Slide1FindYourPeople extends StatelessWidget {
     return _buildSlide(
       context: context,
       isDark: isDark,
-      emoji: '👥',
-      title: 'Find Your People',
-      subtitle: 'Connect with students who share your vibe on campus',
-      gradient1: const Color(0xFF00A86B),
-      gradient2: const Color(0xFF4CD694),
+      emoji: '⌁',
+      title: 'Common ground, nearby',
+      subtitle:
+          'Meet people close by when you share enough of the things that matter.',
+      gradient1: AppColors.primary,
+      gradient2: AppColors.secondary,
     );
   }
 }
 
-// Slide 2: Match by Interests
+// Slide 2: Location privacy
 class _Slide2MatchByInterests extends StatelessWidget {
   const _Slide2MatchByInterests();
 
@@ -206,16 +206,17 @@ class _Slide2MatchByInterests extends StatelessWidget {
     return _buildSlide(
       context: context,
       isDark: isDark,
-      emoji: '🎯',
-      title: 'Match by Interests',
-      subtitle: 'From study buddies to gym partners—find friends who get you',
-      gradient1: const Color(0xFFFF7043),
-      gradient2: const Color(0xFFFF9E7B),
+      emoji: '·',
+      title: 'Close, never precise',
+      subtitle:
+          'We use coarse proximity to introduce people. Your exact location is never shown.',
+      gradient1: AppColors.secondary,
+      gradient2: AppColors.primaryLight,
     );
   }
 }
 
-// Slide 3: Wave & Connect
+// Slide 3: Mutual connection
 class _Slide3WaveAndConnect extends StatelessWidget {
   const _Slide3WaveAndConnect();
 
@@ -225,12 +226,12 @@ class _Slide3WaveAndConnect extends StatelessWidget {
     return _buildSlide(
       context: context,
       isDark: isDark,
-      emoji: '👋',
-      title: 'Wave & Connect',
+      emoji: '↗',
+      title: 'Keep it mutual',
       subtitle:
-          'See someone interesting nearby? Send a wave and start chatting',
-      gradient1: const Color(0xFF29B6F6),
-      gradient2: const Color(0xFF0288D1),
+          'A wave is a simple opening. Conversations begin only when it is returned.',
+      gradient1: AppColors.primary,
+      gradient2: AppColors.secondaryLight,
     );
   }
 }

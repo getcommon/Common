@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../models/chat_models.dart';
 import '../services/chat_service.dart';
+import '../services/safety_service.dart';
 import '../core/theme/app_colors.dart';
 
 class ChatDetailPage extends StatefulWidget {
@@ -134,6 +135,17 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
             ),
           ],
         ),
+        actions: [
+          PopupMenuButton<_SafetyAction>(
+            tooltip: 'Conversation options',
+            onSelected: _handleSafetyAction,
+            itemBuilder: (context) => const [
+              PopupMenuItem(value: _SafetyAction.unmatch, child: Text('Unmatch')),
+              PopupMenuItem(value: _SafetyAction.block, child: Text('Block')),
+              PopupMenuItem(value: _SafetyAction.report, child: Text('Report')),
+            ],
+          ),
+        ],
       ),
       body: Column(
         children: [
@@ -278,7 +290,55 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
       ),
     );
   }
+
+  Future<void> _handleSafetyAction(_SafetyAction action) async {
+    final label = switch (action) {
+      _SafetyAction.unmatch => 'Unmatch',
+      _SafetyAction.block => 'Block',
+      _SafetyAction.report => 'Report',
+    };
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(label + ' ' + widget.otherUserName + '?'),
+        content: Text(
+          action == _SafetyAction.report
+              ? 'This sends a private report to Common’s moderation team.'
+              : action == _SafetyAction.block
+              ? 'They will no longer be able to contact you or appear in your activity.'
+              : 'This removes this conversation from your inbox. You can’t undo it here.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: Text(label)),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    if (action == _SafetyAction.report) {
+      await SafetyService.instance.report(
+        reporterId: _currentUserId,
+        subjectId: widget.otherUserId,
+        conversationId: widget.conversationId,
+        reason: 'Member report',
+      );
+    } else {
+      if (action == _SafetyAction.block) {
+        await SafetyService.instance.block(_currentUserId, widget.otherUserId);
+      } else {
+        await SafetyService.instance.unmatch(_currentUserId, widget.otherUserId);
+      }
+      await ChatService.instance.deleteConversation(widget.conversationId);
+    }
+    if (!mounted) return;
+    if (action != _SafetyAction.report) Navigator.of(context).pop();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(action == _SafetyAction.report ? 'Report sent.' : label + ' complete.')),
+    );
+  }
 }
+
+enum _SafetyAction { unmatch, block, report }
 
 class _AnimatedMessageBubble extends StatefulWidget {
   final Message message;

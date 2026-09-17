@@ -122,5 +122,11 @@ service cloud.firestore {
       allow update: if false;
       allow delete: if false;
     }
+
+    match /reports/{reportId} {
+      allow create: if isSignedIn() &&
+        request.resource.data.reporterId == request.auth.uid;
+      allow read, update, delete: if false;
+    }
   }
 }
