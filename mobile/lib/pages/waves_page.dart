@@ -9,6 +9,7 @@ import '../core/theme/app_colors.dart';
 import '../models/chat_models.dart';
 import '../models/wave_models.dart';
 import '../services/chat_service.dart';
+import '../services/safety_service.dart';
 import '../services/wave_service.dart';
 import '../utils/chat_utils.dart';
 
@@ -44,68 +45,99 @@ class ActivityPage extends StatelessWidget {
                       loading ||
                       conversationsSnapshot.connectionState ==
                           ConnectionState.waiting;
-                  return CustomScrollView(
-                    slivers: [
-                      SliverPadding(
-                        padding: const EdgeInsets.fromLTRB(24, 18, 24, 40),
-                        sliver: SliverList(
-                          delegate: SliverChildListDelegate([
-                            const _ActivityHeader(),
-                            const SizedBox(height: 38),
-                            if (activityLoading)
-                              const _ActivityLoading()
-                            else if (waves.isEmpty && connections.isEmpty)
-                              const _ActivityEmptyState()
-                            else ...[
-                              if (waves.isNotEmpty) ...[
-                                _SectionHeading(
-                                  label: 'Waiting for you',
-                                  detail: _countLabel(waves.length, 'wave'),
-                                ),
-                                const SizedBox(height: 15),
-                                ..._withDividers(
-                                  waves.map(
-                                    (wave) => _IncomingWaveEntry(
-                                      wave: wave,
-                                      onAccept: () =>
-                                          _acceptWave(context, wave),
-                                      onDecline: () =>
-                                          _declineWave(context, wave),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(height: 34),
-                              ],
-                              if (connections.isNotEmpty) ...[
-                                _SectionHeading(
-                                  label: 'New connections',
-                                  detail: _countLabel(
-                                    connections.length,
-                                    'connection',
-                                  ),
-                                ),
-                                const SizedBox(height: 15),
-                                ..._withDividers(
-                                  connections.map(
-                                    (connection) => _ConnectionEntry(
-                                      connection: connection,
-                                      currentUserId: user.uid,
-                                      conversationStarted: _hasConversationWith(
-                                        conversations,
-                                        user.uid,
-                                        connection.getOtherUserId(user.uid),
+                  return StreamBuilder<SafetyState>(
+                    stream: SafetyService.instance.watchSafety(user.uid),
+                    builder: (context, safetySnapshot) {
+                      final safety = safetySnapshot.data ?? const SafetyState();
+                      final visibleWaves = waves
+                          .where(
+                            (wave) =>
+                                !safety.hiddenWaveIds.contains(wave.id) &&
+                                !safety.excludesUser(wave.senderId),
+                          )
+                          .toList();
+                      final visibleConnections = connections
+                          .where(
+                            (connection) => !safety.excludesUser(
+                              connection.getOtherUserId(user.uid),
+                            ),
+                          )
+                          .toList();
+                      final ready =
+                          !activityLoading &&
+                          safetySnapshot.connectionState !=
+                              ConnectionState.waiting;
+                      return CustomScrollView(
+                        slivers: [
+                          SliverPadding(
+                            padding: const EdgeInsets.fromLTRB(24, 18, 24, 40),
+                            sliver: SliverList(
+                              delegate: SliverChildListDelegate([
+                                const _ActivityHeader(),
+                                const SizedBox(height: 38),
+                                if (!ready)
+                                  const _ActivityLoading()
+                                else if (visibleWaves.isEmpty &&
+                                    visibleConnections.isEmpty)
+                                  const _ActivityEmptyState()
+                                else ...[
+                                  if (visibleWaves.isNotEmpty) ...[
+                                    _SectionHeading(
+                                      label: 'Waiting for you',
+                                      detail: _countLabel(
+                                        visibleWaves.length,
+                                        'wave',
                                       ),
                                     ),
-                                  ),
-                                ),
-                              ],
-                              const SizedBox(height: 28),
-                              const _PrivacyNote(),
-                            ],
-                          ]),
-                        ),
-                      ),
-                    ],
+                                    const SizedBox(height: 15),
+                                    ..._withDividers(
+                                      visibleWaves.map(
+                                        (wave) => _IncomingWaveEntry(
+                                          wave: wave,
+                                          onAccept: () =>
+                                              _acceptWave(context, wave),
+                                          onHide: () =>
+                                              _hideWave(context, wave),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 34),
+                                  ],
+                                  if (visibleConnections.isNotEmpty) ...[
+                                    _SectionHeading(
+                                      label: 'New connections',
+                                      detail: _countLabel(
+                                        visibleConnections.length,
+                                        'connection',
+                                      ),
+                                    ),
+                                    const SizedBox(height: 15),
+                                    ..._withDividers(
+                                      visibleConnections.map(
+                                        (connection) => _ConnectionEntry(
+                                          connection: connection,
+                                          currentUserId: user.uid,
+                                          conversationStarted:
+                                              _hasConversationWith(
+                                                conversations,
+                                                user.uid,
+                                                connection.getOtherUserId(
+                                                  user.uid,
+                                                ),
+                                              ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                  const SizedBox(height: 28),
+                                  const _PrivacyNote(),
+                                ],
+                              ]),
+                            ),
+                          ),
+                        ],
+                      );
+                    },
                   );
                 },
               );
@@ -192,18 +224,14 @@ class ActivityPage extends StatelessWidget {
     );
   }
 
-  Future<void> _declineWave(BuildContext context, WaveRequest wave) async {
-    final declined = await WaveService.instance.declineWave(wave.id);
+  Future<void> _hideWave(BuildContext context, WaveRequest wave) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    await SafetyService.instance.hideWave(user.uid, wave.id);
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          declined
-              ? 'Removed from your activity.'
-              : 'That wave is no longer available.',
-        ),
-      ),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Hidden from your activity.')));
   }
 }
 
@@ -269,11 +297,11 @@ class _IncomingWaveEntry extends StatelessWidget {
   const _IncomingWaveEntry({
     required this.wave,
     required this.onAccept,
-    required this.onDecline,
+    required this.onHide,
   });
   final WaveRequest wave;
   final VoidCallback onAccept;
-  final VoidCallback onDecline;
+  final VoidCallback onHide;
 
   @override
   Widget build(BuildContext context) {
@@ -286,7 +314,7 @@ class _IncomingWaveEntry extends StatelessWidget {
       detail: '${wave.timeAgo} · You can take your time.',
       actions: [
         OutlinedButton(onPressed: onAccept, child: const Text('Wave back')),
-        TextButton(onPressed: onDecline, child: const Text('Not now')),
+        TextButton(onPressed: onHide, child: const Text('Hide')),
       ],
     );
   }

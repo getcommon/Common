@@ -11,6 +11,7 @@ import '../data/discover_profiles.dart';
 import '../models/user_profile.dart';
 import '../services/profile_service.dart';
 import '../services/proximity_service.dart';
+import '../services/safety_service.dart';
 import '../services/wave_service.dart';
 
 class HomePage extends StatefulWidget {
@@ -54,61 +55,81 @@ class _HomePageState extends State<HomePage> {
                           viewer,
                         ),
                         builder: (context, matchesSnapshot) {
-                          final profile = _discoverProfileFor(
-                            matchesSnapshot.data,
-                          );
-                          return CustomScrollView(
-                            slivers: [
-                              SliverPadding(
-                                padding: const EdgeInsets.fromLTRB(
-                                  24,
-                                  18,
-                                  24,
-                                  40,
-                                ),
-                                sliver: SliverList(
-                                  delegate: SliverChildListDelegate([
-                                    const _DiscoverHeader(),
-                                    const SizedBox(height: 30),
-                                    if (profile != null)
-                                      _PublicProfile(
-                                        profile: profile,
-                                        wavesRemaining: wavesRemaining
-                                            .clamp(
-                                              0,
-                                              WaveService.dailyWaveLimit,
-                                            )
-                                            .toInt(),
-                                        waveSent: _waveSent,
-                                        isSending: _isSendingWave,
-                                        onWave:
-                                            profile.profile.uid ==
-                                                    erenDiscoverProfile
-                                                        .profile
-                                                        .uid ||
-                                                wavesRemaining <= 0
-                                            ? null
-                                            : () => _sendWave(viewer, profile),
-                                      )
-                                    else if (matchesSnapshot.hasError)
-                                      const _DiscoverState(
-                                        title: 'Discover is taking a moment',
-                                        message:
-                                            'Check your connection, then try again.',
-                                      )
-                                    else if (matchesSnapshot.connectionState ==
-                                        ConnectionState.waiting)
-                                      const _DiscoverLoading()
-                                    else
-                                      const _DiscoverState(
-                                        title: 'Nothing new nearby yet',
-                                        message:
-                                            'We’ll only introduce people when there’s meaningful common ground.',
-                                      ),
-                                  ]),
-                                ),
-                              ),
-                            ],
+                          return StreamBuilder<SafetyState>(
+                            stream: SafetyService.instance.watchSafety(
+                              viewer.uid,
+                            ),
+                            builder: (context, safetySnapshot) {
+                              final safeMatches = (matchesSnapshot.data ?? [])
+                                  .where(
+                                    (match) =>
+                                        !(safetySnapshot.data ??
+                                                const SafetyState())
+                                            .excludesUser(
+                                              match.userProfile.uid,
+                                            ),
+                                  )
+                                  .toList();
+                              final profile = _discoverProfileFor(safeMatches);
+                              return CustomScrollView(
+                                slivers: [
+                                  SliverPadding(
+                                    padding: const EdgeInsets.fromLTRB(
+                                      24,
+                                      18,
+                                      24,
+                                      40,
+                                    ),
+                                    sliver: SliverList(
+                                      delegate: SliverChildListDelegate([
+                                        const _DiscoverHeader(),
+                                        const SizedBox(height: 30),
+                                        if (profile != null)
+                                          _PublicProfile(
+                                            profile: profile,
+                                            wavesRemaining: wavesRemaining
+                                                .clamp(
+                                                  0,
+                                                  WaveService.dailyWaveLimit,
+                                                )
+                                                .toInt(),
+                                            waveSent: _waveSent,
+                                            isSending: _isSendingWave,
+                                            onWave:
+                                                profile.profile.uid ==
+                                                        erenDiscoverProfile
+                                                            .profile
+                                                            .uid ||
+                                                    wavesRemaining <= 0
+                                                ? null
+                                                : () => _sendWave(
+                                                    viewer,
+                                                    profile,
+                                                  ),
+                                          )
+                                        else if (matchesSnapshot.hasError)
+                                          const _DiscoverState(
+                                            title:
+                                                'Discover is taking a moment',
+                                            message:
+                                                'Check your connection, then try again.',
+                                          )
+                                        else if (matchesSnapshot
+                                                .connectionState ==
+                                            ConnectionState.waiting)
+                                          const _DiscoverLoading()
+                                        else
+                                          const _DiscoverState(
+                                            title: 'Nothing new nearby yet',
+                                            message:
+                                                'We’ll only introduce people when there’s meaningful common ground.',
+                                          ),
+                                      ]),
+                                    ),
+                                  ),
+                                ],
+                              );
+                            },
                           );
                         },
                       );

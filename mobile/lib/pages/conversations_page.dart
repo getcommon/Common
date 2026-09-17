@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import '../core/theme/app_colors.dart';
 import '../models/chat_models.dart';
 import '../services/chat_service.dart';
+import '../services/safety_service.dart';
 import 'chat_detail_page.dart';
 
 class ConversationsPage extends StatelessWidget {
@@ -35,52 +36,67 @@ class ConversationsPage extends StatelessWidget {
             }
 
             final conversations = snapshot.data ?? const <Conversation>[];
-            return CustomScrollView(
-              slivers: [
-                SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(24, 18, 24, 40),
-                  sliver: SliverList(
-                    delegate: SliverChildListDelegate([
-                      Text(
-                        'Inbox',
-                        style: Theme.of(context).textTheme.displaySmall
-                            ?.copyWith(
-                              fontWeight: FontWeight.w600,
-                              letterSpacing: -1.1,
-                            ),
+            return StreamBuilder<SafetyState>(
+              stream: SafetyService.instance.watchSafety(user.uid),
+              builder: (context, safetySnapshot) {
+                final safety = safetySnapshot.data ?? const SafetyState();
+                final visibleConversations = conversations
+                    .where(
+                      (conversation) => !safety.excludesUser(
+                        conversation.getOtherParticipantId(user.uid),
                       ),
-                      const SizedBox(height: 6),
-                      Text(
-                        'Conversations begin after a mutual wave.',
-                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                          color: AppColors.textSecondaryLight,
-                        ),
-                      ),
-                      const SizedBox(height: 32),
-                      if (conversations.isEmpty)
-                        const _InboxState(
-                          title: 'Your conversations will gather here.',
-                          message:
-                              'When you both wave, you’ll have a quiet place to say hello.',
-                        )
-                      else ...[
-                        Text(
-                          'Connections',
-                          style: Theme.of(context).textTheme.titleSmall
-                              ?.copyWith(fontWeight: FontWeight.w600),
-                        ),
-                        const SizedBox(height: 14),
-                        ...conversations.map(
-                          (conversation) => _ConversationRow(
-                            conversation: conversation,
-                            currentUserId: user.uid,
+                    )
+                    .toList();
+                if (safetySnapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                return CustomScrollView(
+                  slivers: [
+                    SliverPadding(
+                      padding: const EdgeInsets.fromLTRB(24, 18, 24, 40),
+                      sliver: SliverList(
+                        delegate: SliverChildListDelegate([
+                          Text(
+                            'Inbox',
+                            style: Theme.of(context).textTheme.displaySmall
+                                ?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                  letterSpacing: -1.1,
+                                ),
                           ),
-                        ),
-                      ],
-                    ]),
-                  ),
-                ),
-              ],
+                          const SizedBox(height: 6),
+                          Text(
+                            'Conversations begin after a mutual wave.',
+                            style: Theme.of(context).textTheme.bodyLarge
+                                ?.copyWith(color: AppColors.textSecondaryLight),
+                          ),
+                          const SizedBox(height: 32),
+                          if (visibleConversations.isEmpty)
+                            const _InboxState(
+                              title: 'Your conversations will gather here.',
+                              message:
+                                  'When you both wave, you’ll have a quiet place to say hello.',
+                            )
+                          else ...[
+                            Text(
+                              'Connections',
+                              style: Theme.of(context).textTheme.titleSmall
+                                  ?.copyWith(fontWeight: FontWeight.w600),
+                            ),
+                            const SizedBox(height: 14),
+                            ...visibleConversations.map(
+                              (conversation) => _ConversationRow(
+                                conversation: conversation,
+                                currentUserId: user.uid,
+                              ),
+                            ),
+                          ],
+                        ]),
+                      ),
+                    ),
+                  ],
+                );
+              },
             );
           },
         ),

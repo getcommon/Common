@@ -140,7 +140,10 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
             tooltip: 'Conversation options',
             onSelected: _handleSafetyAction,
             itemBuilder: (context) => const [
-              PopupMenuItem(value: _SafetyAction.unmatch, child: Text('Unmatch')),
+              PopupMenuItem(
+                value: _SafetyAction.unmatch,
+                child: Text('Unmatch'),
+              ),
               PopupMenuItem(value: _SafetyAction.block, child: Text('Block')),
               PopupMenuItem(value: _SafetyAction.report, child: Text('Report')),
             ],
@@ -300,7 +303,7 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: Text(label + ' ' + widget.otherUserName + '?'),
+        title: Text('$label ${widget.otherUserName}?'),
         content: Text(
           action == _SafetyAction.report
               ? 'This sends a private report to Common’s moderation team.'
@@ -309,8 +312,14 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
               : 'This removes this conversation from your inbox. You can’t undo it here.',
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: Text(label)),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text(label),
+          ),
         ],
       ),
     );
@@ -326,14 +335,21 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
       if (action == _SafetyAction.block) {
         await SafetyService.instance.block(_currentUserId, widget.otherUserId);
       } else {
-        await SafetyService.instance.unmatch(_currentUserId, widget.otherUserId);
+        await SafetyService.instance.unmatch(
+          _currentUserId,
+          widget.otherUserId,
+        );
       }
       await ChatService.instance.deleteConversation(widget.conversationId);
     }
     if (!mounted) return;
     if (action != _SafetyAction.report) Navigator.of(context).pop();
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(action == _SafetyAction.report ? 'Report sent.' : label + ' complete.')),
+      SnackBar(
+        content: Text(
+          action == _SafetyAction.report ? 'Report sent.' : '$label complete.',
+        ),
+      ),
     );
   }
 }
