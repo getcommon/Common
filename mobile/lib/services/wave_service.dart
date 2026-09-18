@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/foundation.dart';
 import '../models/wave_models.dart';
 
@@ -12,6 +13,7 @@ class WaveService {
   static const int dailyWaveLimit = 3;
 
   final _db = FirebaseFirestore.instance;
+  final _functions = FirebaseFunctions.instance;
 
   /// Send a wave to another user
   ///
@@ -23,33 +25,10 @@ class WaveService {
     required Map<String, dynamic> receiverProfile,
   }) async {
     try {
-      if (await wavesSentToday(senderId) >= dailyWaveLimit) {
-        throw StateError('Daily wave limit reached');
-      }
-
-      // Check if wave already exists (in either direction)
-      final existingWave = await _checkExistingWave(senderId, receiverId);
-      if (existingWave != null) {
-        debugPrint('Wave already exists: ${existingWave.id}');
-        return null;
-      }
-
-      // Create new wave request
-      final waveRef = _db.collection('waves').doc();
-      final wave = WaveRequest(
-        id: waveRef.id,
-        senderId: senderId,
-        receiverId: receiverId,
-        timestamp: DateTime.now(),
-        status: WaveStatus.pending,
-        senderProfile: senderProfile,
-        receiverProfile: receiverProfile,
-      );
-
-      await waveRef.set(wave.toMap());
-      debugPrint('✋ Wave sent from $senderId to $receiverId');
-
-      return waveRef.id;
+      final response = await _functions
+          .httpsCallable('sendWave')
+          .call<Map<String, dynamic>>({'receiverId': receiverId});
+      return response.data['waveId'] as String?;
     } catch (e) {
       debugPrint('Error sending wave: $e');
       return null;
@@ -98,71 +77,13 @@ class WaveService {
   /// Returns the match ID if a mutual match was created, null otherwise
   Future<String?> acceptWave(String waveId) async {
     try {
-      final wave = await getWave(waveId);
-      if (wave == null) {
-        debugPrint('Wave not found: $waveId');
-        return null;
-      }
-
-      if (wave.status != WaveStatus.pending) {
-        debugPrint('Wave already responded to: $waveId');
-        return null;
-      }
-
-      // Step 1: Accept the incoming wave
-      await _db.collection('waves').doc(waveId).update({
-        'status': WaveStatus.accepted.name,
-        'respondedAt': FieldValue.serverTimestamp(),
-      });
-
-      debugPrint('✅ Wave accepted: $waveId');
-
-      // Step 2: Automatically create an ACCEPTED wave back
-      // This is the key difference - we create an already-accepted reverse wave
-      final existingReverseWave = await _getWaveInAnyStatus(
-        wave.receiverId,
-        wave.senderId,
-      );
-
-      String? reverseWaveId;
-      if (existingReverseWave == null) {
-        // Create reverse wave as ACCEPTED (not pending)
-        debugPrint(
-          '👋 Auto-waving back from ${wave.receiverId} to ${wave.senderId}',
-        );
-        final reverseRef = _db.collection('waves').doc();
-        final reverseWave = WaveRequest(
-          id: reverseRef.id,
-          senderId: wave.receiverId,
-          receiverId: wave.senderId,
-          timestamp: DateTime.now(),
-          status: WaveStatus.accepted, // Already accepted!
-          respondedAt: DateTime.now(),
-          senderProfile: wave.receiverProfile,
-          receiverProfile: wave.senderProfile,
-        );
-        await reverseRef.set(reverseWave.toMap());
-        reverseWaveId = reverseRef.id;
-      } else if (existingReverseWave.status == WaveStatus.pending) {
-        // If they already waved at us, accept their wave too
-        await _db.collection('waves').doc(existingReverseWave.id).update({
-          'status': WaveStatus.accepted.name,
-          'respondedAt': FieldValue.serverTimestamp(),
-        });
-        reverseWaveId = existingReverseWave.id;
-      }
-
-      // Step 3: Create mutual match and conversation
-      final matchId = await _createMutualMatch(
-        wave.id,
-        reverseWaveId ?? '',
-        wave.senderId,
-        wave.receiverId,
-        wave.senderProfile,
-        wave.receiverProfile,
-      );
-
-      return matchId; // Return match ID if match was created
+      final response = await _functions
+          .httpsCallable('respondToWave')
+          .call<Map<String, dynamic>>({
+            'waveId': waveId,
+            'response': WaveStatus.accepted.name,
+          });
+      return response.data['matchId'] as String?;
     } catch (e) {
       debugPrint('Error accepting wave: $e');
       return null;
@@ -350,6 +271,7 @@ class WaveService {
   }
 
   /// Check if there's an existing pending wave between two users (either direction)
+  // ignore: unused_element
   Future<WaveRequest?> _checkExistingWave(
     String user1Id,
     String user2Id,
@@ -380,6 +302,7 @@ class WaveService {
 
   /// Create a mutual match and start a conversation
   /// Returns the match ID if successful
+  // ignore: unused_element
   Future<String?> _createMutualMatch(
     String wave1Id,
     String wave2Id,
@@ -494,6 +417,7 @@ class WaveService {
   }
 
   /// Get a wave in any status (helper method)
+  // ignore: unused_element
   Future<WaveRequest?> _getWaveInAnyStatus(
     String senderId,
     String receiverId,

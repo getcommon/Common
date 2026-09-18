@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/foundation.dart';
 import 'dart:math';
 import 'dart:async';
@@ -13,6 +14,7 @@ class ProximityService {
   static final instance = ProximityService._();
 
   final _db = FirebaseFirestore.instance;
+  final _functions = FirebaseFunctions.instance;
 
   // Caching for performance
   final Map<String, List<ProximityMatch>> _matchCache = {};
@@ -470,12 +472,7 @@ class ProximityService {
     final controller = StreamController<List<ProximityMatch>>();
 
     // Start with immediate search
-    findNearbyMatches(
-          currentUserProfile,
-          maxDistanceKm: maxDistanceKm,
-          minCommonInterests: minCommonInterests,
-          limit: limit,
-        )
+    _findServerMatches()
         .then((matches) {
           if (!controller.isClosed) controller.add(matches);
         })
@@ -485,12 +482,7 @@ class ProximityService {
 
     // Then update every 2 minutes
     final timer = Timer.periodic(const Duration(minutes: 2), (timer) {
-      findNearbyMatches(
-            currentUserProfile,
-            maxDistanceKm: maxDistanceKm,
-            minCommonInterests: minCommonInterests,
-            limit: limit,
-          )
+      _findServerMatches()
           .then((matches) {
             if (!controller.isClosed) controller.add(matches);
           })
@@ -506,6 +498,38 @@ class ProximityService {
     };
 
     return controller.stream;
+  }
+
+  Future<List<ProximityMatch>> _findServerMatches() async {
+    final response = await _functions
+        .httpsCallable('findNearbyMatches')
+        .call<Map<String, dynamic>>({});
+    final rawMatches = (response.data['matches'] as List? ?? const []);
+    return rawMatches.map((rawMatch) {
+      final match = Map<String, dynamic>.from(rawMatch as Map);
+      final profile = Map<String, dynamic>.from(
+        match['userProfile'] as Map? ?? const {},
+      );
+      return ProximityMatch(
+        userProfile: UserProfile(
+          uid: profile['uid'] as String,
+          displayName: profile['displayName'] as String?,
+          photoUrl: profile['photoUrl'] as String?,
+          bio: profile['bio'] as String?,
+          interests:
+              (profile['interests'] as List?)?.cast<String>() ?? const [],
+          vibeTags: (profile['vibeTags'] as List?)?.cast<String>() ?? const [],
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        ),
+        // The server returns a representative value for a coarse distance band,
+        // never another member's calculated distance.
+        distanceKm: (match['distanceKm'] as num).toDouble(),
+        commonInterests:
+            (match['commonInterests'] as List?)?.cast<String>() ?? const [],
+        matchScore: (match['matchScore'] as num).toDouble(),
+      );
+    }).toList();
   }
 
   /// Get cached matches if they exist and are not expired

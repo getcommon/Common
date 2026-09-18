@@ -26,7 +26,7 @@ class ConversationsPage extends StatelessWidget {
           stream: ChatService.instance.watchUserConversations(user.uid),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Center(child: CircularProgressIndicator());
+              return const _InboxLoadingShell();
             }
             if (snapshot.hasError) {
               return const _InboxState(
@@ -250,6 +250,39 @@ class _InboxAvatar extends StatelessWidget {
             ),
           )
         : null,
+  );
+}
+
+/// Keeps the Inbox identity visible while its retained stream reconnects.
+class _InboxLoadingShell extends StatelessWidget {
+  const _InboxLoadingShell();
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    body: SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(24, 18, 24, 40),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Inbox',
+              style: Theme.of(context).textTheme.displaySmall?.copyWith(
+                fontWeight: FontWeight.w600,
+                letterSpacing: -1.1,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Conversations begin after a mutual wave.',
+              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                color: AppColors.textSecondaryLight,
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
   );
 }
 

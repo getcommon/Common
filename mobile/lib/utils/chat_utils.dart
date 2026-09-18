@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../services/chat_service.dart';
-import '../services/profile_service.dart';
 import '../services/wave_service.dart';
 import '../pages/chat_detail_page.dart';
 
@@ -46,42 +45,14 @@ class ChatUtils {
         return;
       }
 
-      // Get current user's profile
-      final currentUserProfile = await ProfileService.instance.getProfile(
-        currentUser.uid,
-      );
-      if (currentUserProfile == null) {
-        if (context.mounted) Navigator.of(context).pop();
-        throw Exception('Could not load your profile');
-      }
-
-      // Get other user's profile
-      final otherUserProfile = await ProfileService.instance.getProfile(
-        otherUserId,
-      );
-      if (otherUserProfile == null) {
-        if (context.mounted) Navigator.of(context).pop();
-        throw Exception('Could not load user profile');
-      }
-
-      // Create profile maps for conversation metadata
-      final currentUserProfileMap = {
-        'displayName': currentUserProfile.displayName,
-        'photoUrl': currentUserProfile.photoUrl,
-      };
-
-      final otherUserProfileMap = {
-        'displayName': otherUserProfile.displayName,
-        'photoUrl': otherUserProfile.photoUrl,
-      };
-
-      // Get or create conversation
-      final conversationId = await ChatService.instance.getOrCreateConversation(
+      final conversationId = await ChatService.instance.findConversationId(
         currentUser.uid,
         otherUserId,
-        currentUserProfileMap,
-        otherUserProfileMap,
       );
+      if (conversationId == null) {
+        if (context.mounted) Navigator.of(context).pop();
+        throw Exception('Your conversation is still being prepared.');
+      }
 
       // Close loading dialog
       if (context.mounted) Navigator.of(context).pop();
@@ -93,7 +64,7 @@ class ChatUtils {
             builder: (_) => ChatDetailPage(
               conversationId: conversationId,
               otherUserId: otherUserId,
-              otherUserName: otherUserProfile.displayName ?? 'User',
+              otherUserName: 'Connection',
             ),
           ),
         );

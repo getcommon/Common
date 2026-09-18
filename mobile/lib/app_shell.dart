@@ -21,6 +21,20 @@ class AppShell extends StatefulWidget {
 
 class _AppShellState extends State<AppShell> {
   int _currentIndex = 0;
+  late final List<Widget> _pages;
+
+  @override
+  void initState() {
+    super.initState();
+    _pages = [
+      HomePage(
+        onNavigateToTab: (index) => setState(() => _currentIndex = index),
+      ),
+      const ActivityPage(),
+      const ConversationsPage(),
+      const ProfilePage(),
+    ];
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -38,18 +52,8 @@ class _AppShellState extends State<AppShell> {
           );
         }
 
-        final pages = [
-          HomePage(
-            // Pass callback to navigate between tabs
-            onNavigateToTab: (index) => setState(() => _currentIndex = index),
-          ),
-          const ActivityPage(),
-          const ConversationsPage(),
-          const ProfilePage(),
-        ];
-
         return Scaffold(
-          body: IndexedStack(index: _currentIndex, children: pages),
+          body: IndexedStack(index: _currentIndex, children: _pages),
           bottomNavigationBar: _BottomNav(
             currentIndex: _currentIndex,
             onTap: (index) => setState(() => _currentIndex = index),

@@ -8,6 +8,24 @@ class ChatService {
 
   final _db = FirebaseFirestore.instance;
 
+  /// Finds the server-created conversation for a mutual connection.
+  Future<String?> findConversationId(
+    String currentUserId,
+    String otherUserId,
+  ) async {
+    final snapshot = await _db
+        .collection('conversations')
+        .where('participantIds', arrayContains: currentUserId)
+        .get();
+    for (final document in snapshot.docs) {
+      final participants =
+          (document.data()['participantIds'] as List?)?.cast<String>() ??
+          const <String>[];
+      if (participants.contains(otherUserId)) return document.id;
+    }
+    return null;
+  }
+
   /// Get or create a conversation between two users
   Future<String> getOrCreateConversation(
     String currentUserId,

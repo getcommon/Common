@@ -33,8 +33,17 @@ interface UserProfile {
   location?: UserLocation;
 }
 
+interface PublicDiscoverProfile {
+  uid: string;
+  displayName?: string;
+  photoUrl?: string;
+  bio?: string;
+  interests: string[];
+  vibeTags: string[];
+}
+
 interface ProximityMatch {
-  userProfile: UserProfile;
+  userProfile: PublicDiscoverProfile;
   distanceKm: number;
   commonInterests: string[];
   matchScore: number;
@@ -52,6 +61,169 @@ interface FindMatchesResponse {
   totalProcessed: number;
   executionTimeMs: number;
 }
+
+const dailyWaveLimit = 3;
+
+function connectionId(firstUserId: string, secondUserId: string): string {
+  return [firstUserId, secondUserId].sort().join('_');
+}
+
+function profilePreview(profile: FirebaseFirestore.DocumentData) {
+  return {
+    displayName: profile.displayName ?? null,
+    photoUrl: profile.photoUrl ?? null,
+  };
+}
+
+/**
+ * Creates a wave only after checking the daily allowance and existing state on
+ * the server. Client supplied profile metadata is intentionally ignored.
+ */
+export const sendWave = onCall({ region: 'us-central1' }, async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'Sign in to send a wave.');
+  }
+  const receiverId = request.data?.receiverId;
+  if (typeof receiverId !== 'string' || !receiverId || receiverId === request.auth.uid) {
+    throw new HttpsError('invalid-argument', 'Choose another member to wave to.');
+  }
+
+  const db = admin.firestore();
+  const senderId = request.auth.uid;
+  const today = admin.firestore.Timestamp.fromDate(
+    new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate()),
+  );
+  const waveRef = db.collection('waves').doc();
+
+  await db.runTransaction(async (transaction) => {
+    const [sender, receiver, todayWaves, existing] = await Promise.all([
+      transaction.get(db.collection('users').doc(senderId)),
+      transaction.get(db.collection('users').doc(receiverId)),
+      transaction.get(
+        db.collection('waves')
+          .where('senderId', '==', senderId)
+          .where('timestamp', '>=', today),
+      ),
+      transaction.get(
+        db.collection('waves')
+          .where('senderId', '==', senderId)
+          .where('receiverId', '==', receiverId)
+          .limit(1),
+      ),
+    ]);
+    if (!sender.exists || !receiver.exists) {
+      throw new HttpsError('not-found', 'That profile is no longer available.');
+    }
+    if (todayWaves.size >= dailyWaveLimit) {
+      throw new HttpsError('resource-exhausted', 'Today’s waves have been used.');
+    }
+    if (!existing.empty) {
+      throw new HttpsError('already-exists', 'A wave already exists.');
+    }
+    transaction.set(waveRef, {
+      senderId,
+      receiverId,
+      timestamp: admin.firestore.FieldValue.serverTimestamp(),
+      status: 'pending',
+      respondedAt: null,
+      senderProfile: profilePreview(sender.data()!),
+      receiverProfile: profilePreview(receiver.data()!),
+    });
+  });
+
+  return { waveId: waveRef.id };
+});
+
+/**
+ * Responds to a received wave and, when accepted, creates the reciprocal wave,
+ * mutual connection, and conversation in one server-authoritative transaction.
+ */
+export const respondToWave = onCall({ region: 'us-central1' }, async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'Sign in to respond to a wave.');
+  }
+  const waveId = request.data?.waveId;
+  const response = request.data?.response;
+  if (typeof waveId !== 'string' || !['accepted', 'declined'].includes(response)) {
+    throw new HttpsError('invalid-argument', 'A wave and valid response are required.');
+  }
+
+  const db = admin.firestore();
+  const waveRef = db.collection('waves').doc(waveId);
+  let matchId: string | null = null;
+  await db.runTransaction(async (transaction) => {
+    const waveSnapshot = await transaction.get(waveRef);
+    if (!waveSnapshot.exists) throw new HttpsError('not-found', 'Wave not found.');
+    const wave = waveSnapshot.data()!;
+    if (wave.receiverId !== request.auth!.uid || wave.status !== 'pending') {
+      throw new HttpsError('failed-precondition', 'That wave is no longer available.');
+    }
+    transaction.update(waveRef, {
+      status: response,
+      respondedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    if (response === 'declined') return;
+
+    const reverseRef = db.collection('waves').doc();
+    const id = connectionId(wave.senderId, wave.receiverId);
+    const matchRef = db.collection('mutual_matches').doc(id);
+    const conversationRef = db.collection('conversations').doc(id);
+    const [existingReverse, existingMatch, existingConversation] = await Promise.all([
+      transaction.get(
+        db.collection('waves')
+          .where('senderId', '==', wave.receiverId)
+          .where('receiverId', '==', wave.senderId)
+          .limit(1),
+      ),
+      transaction.get(matchRef),
+      transaction.get(conversationRef),
+    ]);
+    const reverseWaveId = existingReverse.empty ? reverseRef.id : existingReverse.docs[0].id;
+    if (existingReverse.empty) {
+      transaction.set(reverseRef, {
+        senderId: wave.receiverId,
+        receiverId: wave.senderId,
+        timestamp: admin.firestore.FieldValue.serverTimestamp(),
+        status: 'accepted',
+        respondedAt: admin.firestore.FieldValue.serverTimestamp(),
+        senderProfile: wave.receiverProfile,
+        receiverProfile: wave.senderProfile,
+      });
+    } else if (existingReverse.docs[0].data().status === 'pending') {
+      transaction.update(existingReverse.docs[0].ref, {
+        status: 'accepted',
+        respondedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    }
+    if (!existingMatch.exists) {
+      transaction.set(matchRef, {
+        user1Id: wave.senderId,
+        user2Id: wave.receiverId,
+        matchedAt: admin.firestore.FieldValue.serverTimestamp(),
+        wave1Id: wave.id,
+        wave2Id: reverseWaveId,
+        user1Profile: wave.senderProfile,
+        user2Profile: wave.receiverProfile,
+      });
+    }
+    if (!existingConversation.exists) {
+      transaction.set(conversationRef, {
+        participantIds: [wave.senderId, wave.receiverId],
+        participantProfiles: {
+          [wave.senderId]: wave.senderProfile,
+          [wave.receiverId]: wave.receiverProfile,
+        },
+        lastMessage: null,
+        lastMessageTime: admin.firestore.FieldValue.serverTimestamp(),
+        lastMessageSenderId: null,
+        unreadCount: { [wave.senderId]: 0, [wave.receiverId]: 0 },
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    }
+    matchId = id;
+  });
+  return { matchId };
+});
 
 /**
  * Calculate distance between two coordinates using Haversine formula
@@ -147,20 +319,15 @@ export const findNearbyMatches = onCall(
       );
     }
 
-    const {
-      currentUserUid,
-      maxDistanceKm = 0.1, // 100 meters default
-      minCommonInterests = 1,
-      limit = 10
-    } = data;
-
-    // Validate current user
-    if (currentUserUid !== context.uid) {
-      throw new HttpsError(
-        'permission-denied',
-        'Can only find matches for authenticated user'
-      );
-    }
+    const currentUserUid = context.uid;
+    // Radius is always the member's own selected setting, capped to the
+    // product's preferred 0.5-mile range. The caller cannot widen it.
+    const maxDistanceKm = Math.min(
+      Math.max(Number((data as any).maxDistanceKm ?? 0.8), 0.1),
+      0.8,
+    );
+    const minCommonInterests = 1;
+    const limit = 10;
 
     try {
       const db = admin.firestore();
@@ -271,9 +438,19 @@ export const findNearbyMatches = onCall(
             distance
           );
 
+          const coarseDistanceKm = distance < 0.48 ? 0.2 : distance < 0.8 ? 0.5 : 0.8;
           matches.push({
-            userProfile,
-            distanceKm: distance,
+            userProfile: {
+              uid: doc.id,
+              displayName: userProfile.displayName ?? null,
+              photoUrl: userProfile.photoUrl ?? null,
+              bio: userProfile.bio ?? null,
+              interests: userProfile.interests ?? [],
+              vibeTags: (userProfile as any).vibeTags ?? [],
+            },
+            // Representative band only: clients never receive exact distance
+            // or the underlying location document.
+            distanceKm: coarseDistanceKm,
             commonInterests,
             matchScore
           });

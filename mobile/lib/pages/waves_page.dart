@@ -6,9 +6,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../core/theme/app_colors.dart';
-import '../models/chat_models.dart';
 import '../models/wave_models.dart';
-import '../services/chat_service.dart';
 import '../services/safety_service.dart';
 import '../services/wave_service.dart';
 import '../utils/chat_utils.dart';
@@ -36,108 +34,89 @@ class ActivityPage extends StatelessWidget {
               final loading =
                   waveSnapshot.connectionState == ConnectionState.waiting ||
                   connectionSnapshot.connectionState == ConnectionState.waiting;
-              return StreamBuilder<List<Conversation>>(
-                stream: ChatService.instance.watchUserConversations(user.uid),
-                builder: (context, conversationsSnapshot) {
-                  final conversations =
-                      conversationsSnapshot.data ?? const <Conversation>[];
-                  final activityLoading =
-                      loading ||
-                      conversationsSnapshot.connectionState ==
-                          ConnectionState.waiting;
-                  return StreamBuilder<SafetyState>(
-                    stream: SafetyService.instance.watchSafety(user.uid),
-                    builder: (context, safetySnapshot) {
-                      final safety = safetySnapshot.data ?? const SafetyState();
-                      final visibleWaves = waves
-                          .where(
-                            (wave) =>
-                                !safety.hiddenWaveIds.contains(wave.id) &&
-                                !safety.excludesUser(wave.senderId),
-                          )
-                          .toList();
-                      final visibleConnections = connections
-                          .where(
-                            (connection) => !safety.excludesUser(
-                              connection.getOtherUserId(user.uid),
-                            ),
-                          )
-                          .toList();
-                      final ready =
-                          !activityLoading &&
-                          safetySnapshot.connectionState !=
-                              ConnectionState.waiting;
-                      return CustomScrollView(
-                        slivers: [
-                          SliverPadding(
-                            padding: const EdgeInsets.fromLTRB(24, 18, 24, 40),
-                            sliver: SliverList(
-                              delegate: SliverChildListDelegate([
-                                const _ActivityHeader(),
-                                const SizedBox(height: 38),
-                                if (!ready)
-                                  const _ActivityLoading()
-                                else if (visibleWaves.isEmpty &&
-                                    visibleConnections.isEmpty)
-                                  const _ActivityEmptyState()
-                                else ...[
-                                  if (visibleWaves.isNotEmpty) ...[
-                                    _SectionHeading(
-                                      label: 'Waiting for you',
-                                      detail: _countLabel(
-                                        visibleWaves.length,
-                                        'wave',
-                                      ),
+              return StreamBuilder<SafetyState>(
+                stream: SafetyService.instance.watchSafety(user.uid),
+                builder: (context, safetySnapshot) {
+                  final safety = safetySnapshot.data ?? const SafetyState();
+                  final visibleWaves = waves
+                      .where(
+                        (wave) =>
+                            !safety.hiddenWaveIds.contains(wave.id) &&
+                            !safety.excludesUser(wave.senderId),
+                      )
+                      .toList();
+                  final visibleConnections = connections
+                      .where(
+                        (connection) => !safety.excludesUser(
+                          connection.getOtherUserId(user.uid),
+                        ),
+                      )
+                      .toList();
+                  final ready =
+                      !loading &&
+                      safetySnapshot.connectionState != ConnectionState.waiting;
+                  final showInitialLoading =
+                      !ready && waves.isEmpty && connections.isEmpty;
+                  return CustomScrollView(
+                    slivers: [
+                      SliverPadding(
+                        padding: const EdgeInsets.fromLTRB(24, 18, 24, 40),
+                        sliver: SliverList(
+                          delegate: SliverChildListDelegate([
+                            const _ActivityHeader(),
+                            const SizedBox(height: 38),
+                            if (showInitialLoading)
+                              const SizedBox.shrink()
+                            else if (visibleWaves.isEmpty &&
+                                visibleConnections.isEmpty)
+                              const _ActivityEmptyState()
+                            else ...[
+                              if (visibleWaves.isNotEmpty) ...[
+                                _SectionHeading(
+                                  label: 'Waiting for you',
+                                  detail: _countLabel(
+                                    visibleWaves.length,
+                                    'wave',
+                                  ),
+                                ),
+                                const SizedBox(height: 15),
+                                ..._withDividers(
+                                  visibleWaves.map(
+                                    (wave) => _IncomingWaveEntry(
+                                      wave: wave,
+                                      onAccept: () =>
+                                          _acceptWave(context, wave),
+                                      onHide: () => _hideWave(context, wave),
                                     ),
-                                    const SizedBox(height: 15),
-                                    ..._withDividers(
-                                      visibleWaves.map(
-                                        (wave) => _IncomingWaveEntry(
-                                          wave: wave,
-                                          onAccept: () =>
-                                              _acceptWave(context, wave),
-                                          onHide: () =>
-                                              _hideWave(context, wave),
-                                        ),
-                                      ),
+                                  ),
+                                ),
+                                const SizedBox(height: 34),
+                              ],
+                              if (visibleConnections.isNotEmpty) ...[
+                                _SectionHeading(
+                                  label: 'New connections',
+                                  detail: _countLabel(
+                                    visibleConnections.length,
+                                    'connection',
+                                  ),
+                                ),
+                                const SizedBox(height: 15),
+                                ..._withDividers(
+                                  visibleConnections.map(
+                                    (connection) => _ConnectionEntry(
+                                      connection: connection,
+                                      currentUserId: user.uid,
                                     ),
-                                    const SizedBox(height: 34),
-                                  ],
-                                  if (visibleConnections.isNotEmpty) ...[
-                                    _SectionHeading(
-                                      label: 'New connections',
-                                      detail: _countLabel(
-                                        visibleConnections.length,
-                                        'connection',
-                                      ),
-                                    ),
-                                    const SizedBox(height: 15),
-                                    ..._withDividers(
-                                      visibleConnections.map(
-                                        (connection) => _ConnectionEntry(
-                                          connection: connection,
-                                          currentUserId: user.uid,
-                                          conversationStarted:
-                                              _hasConversationWith(
-                                                conversations,
-                                                user.uid,
-                                                connection.getOtherUserId(
-                                                  user.uid,
-                                                ),
-                                              ),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                  const SizedBox(height: 28),
-                                  const _PrivacyNote(),
-                                ],
-                              ]),
-                            ),
-                          ),
-                        ],
-                      );
-                    },
+                                  ),
+                                ),
+                              ],
+                              const SizedBox(height: 28),
+                              const _PrivacyNote(),
+                            ],
+                          ]),
+                        ),
+                      ),
+                    ],
                   );
                 },
               );
@@ -150,16 +129,6 @@ class ActivityPage extends StatelessWidget {
 
   static String _countLabel(int count, String noun) =>
       '$count $noun${count == 1 ? '' : 's'}';
-
-  static bool _hasConversationWith(
-    List<Conversation> conversations,
-    String currentUserId,
-    String otherUserId,
-  ) => conversations.any(
-    (conversation) =>
-        conversation.participantIds.contains(currentUserId) &&
-        conversation.participantIds.contains(otherUserId),
-  );
 
   static Iterable<Widget> _withDividers(Iterable<Widget> entries) sync* {
     var first = true;
@@ -324,11 +293,9 @@ class _ConnectionEntry extends StatelessWidget {
   const _ConnectionEntry({
     required this.connection,
     required this.currentUserId,
-    required this.conversationStarted,
   });
   final MutualMatch connection;
   final String currentUserId;
-  final bool conversationStarted;
 
   @override
   Widget build(BuildContext context) {
@@ -347,7 +314,7 @@ class _ConnectionEntry extends StatelessWidget {
             connection.getOtherUserId(currentUserId),
           ),
           icon: const Icon(Icons.arrow_forward_rounded, size: 17),
-          label: Text(conversationStarted ? 'Open conversation' : 'Say hello'),
+          label: const Text('Open conversation'),
           style: TextButton.styleFrom(
             padding: const EdgeInsets.symmetric(horizontal: 4),
           ),
@@ -484,15 +451,6 @@ class _PrivacyNote extends StatelessWidget {
         ),
       ),
     ],
-  );
-}
-
-class _ActivityLoading extends StatelessWidget {
-  const _ActivityLoading();
-  @override
-  Widget build(BuildContext context) => const Padding(
-    padding: EdgeInsets.only(top: 72),
-    child: Center(child: CircularProgressIndicator()),
   );
 }
 
