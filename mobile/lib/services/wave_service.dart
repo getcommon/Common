@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/foundation.dart';
@@ -407,13 +409,47 @@ class WaveService {
 
   /// Get all mutual matches for a user
   Stream<List<MutualMatch>> watchMutualMatches(String userId) {
-    return _db.collection('mutual_matches').snapshots().map((snapshot) {
-      return snapshot.docs
-          .map((doc) => MutualMatch.fromMap(doc.data()))
-          .where((match) => match.user1Id == userId || match.user2Id == userId)
-          .toList()
+    late final StreamSubscription<QuerySnapshot<Map<String, dynamic>>> first;
+    late final StreamSubscription<QuerySnapshot<Map<String, dynamic>>> second;
+    var firstMatches = const <MutualMatch>[];
+    var secondMatches = const <MutualMatch>[];
+
+    void emit(StreamController<List<MutualMatch>> controller) {
+      final matches = [...firstMatches, ...secondMatches]
         ..sort((a, b) => b.matchedAt.compareTo(a.matchedAt));
-    });
+      controller.add(matches);
+    }
+
+    late final StreamController<List<MutualMatch>> controller;
+    controller = StreamController<List<MutualMatch>>(
+      onListen: () {
+        first = _db
+            .collection('mutual_matches')
+            .where('user1Id', isEqualTo: userId)
+            .snapshots()
+            .listen((snapshot) {
+              firstMatches = snapshot.docs
+                  .map((doc) => MutualMatch.fromMap(doc.data()))
+                  .toList();
+              emit(controller);
+            }, onError: controller.addError);
+        second = _db
+            .collection('mutual_matches')
+            .where('user2Id', isEqualTo: userId)
+            .snapshots()
+            .listen((snapshot) {
+              secondMatches = snapshot.docs
+                  .map((doc) => MutualMatch.fromMap(doc.data()))
+                  .toList();
+              emit(controller);
+            }, onError: controller.addError);
+      },
+      onCancel: () async {
+        await first.cancel();
+        await second.cancel();
+      },
+    );
+    return controller.stream;
   }
 
   /// Get a wave in any status (helper method)

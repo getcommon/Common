@@ -336,20 +336,35 @@ class LocationService {
   }
 
   /// Set user location visibility (opt-in/opt-out)
-  Future<void> setLocationVisibility(String uid, bool isVisible) async {
+  /// Enables presence only after the member intentionally turns it on.
+  /// Permission is requested here rather than during sign-in.
+  Future<bool> setLocationVisibility(String uid, bool isVisible) async {
+    if (!isVisible) {
+      await _db.collection('users').doc(uid).set({
+        'location': {
+          'isVisible': false,
+          'lastUpdated': FieldValue.serverTimestamp(),
+        },
+      }, SetOptions(merge: true));
+      stopTracking();
+      return true;
+    }
+
+    final initialized = await initForUser(uid);
+    if (!initialized) return false;
     await _db.collection('users').doc(uid).set({
       'location': {
-        'isVisible': isVisible,
+        'isVisible': true,
         'lastUpdated': FieldValue.serverTimestamp(),
       },
     }, SetOptions(merge: true));
+    return true;
+  }
 
-    if (!isVisible) {
-      stopTracking();
-    } else if (_currentUserId == uid) {
-      await _updateUserLocation();
-      startTracking();
-    }
+  /// Backgrounding pauses presence; returning never resumes it automatically.
+  Future<void> pauseDiscoverability(String uid) async {
+    if (_currentUserId != uid) return;
+    await setLocationVisibility(uid, false);
   }
 
   /// Check if location permission is granted

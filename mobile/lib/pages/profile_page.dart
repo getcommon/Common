@@ -260,10 +260,17 @@ class _DiscoverabilityToggleState extends State<_DiscoverabilityToggle> {
   Future<void> _setVisible(bool visible) async {
     setState(() => _saving = true);
     try {
-      await LocationService.instance.setLocationVisibility(
+      final updated = await LocationService.instance.setLocationVisibility(
         widget.profile.uid,
         visible,
       );
+      if (!updated && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Location access is needed to become discoverable.'),
+          ),
+        );
+      }
     } finally {
       if (mounted) setState(() => _saving = false);
     }

@@ -80,7 +80,34 @@ class BootstrapGate extends StatefulWidget {
   State<BootstrapGate> createState() => _BootstrapGateState();
 }
 
-class _BootstrapGateState extends State<BootstrapGate> {
+class _BootstrapGateState extends State<BootstrapGate>
+    with WidgetsBindingObserver {
+  String? _activeUserId;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached) {
+      final userId = _activeUserId;
+      if (userId != null) {
+        LocationService.instance.pauseDiscoverability(userId);
+      }
+    }
+  }
+
   /// Initialize FCM and location services for the authenticated user.
   ///
   /// This is called once the user is authenticated to set up:
@@ -90,6 +117,7 @@ class _BootstrapGateState extends State<BootstrapGate> {
   /// Note: Location permission denial doesn't block the app -
   /// users can enable it later in settings.
   Future<void> _initUserServices(String uid) async {
+    _activeUserId = uid;
     debugPrint('🔍 _initUserServices: Starting for uid=$uid');
 
     try {
@@ -99,29 +127,6 @@ class _BootstrapGateState extends State<BootstrapGate> {
       debugPrint('🔍 _initUserServices: FCM initialized successfully');
     } catch (e) {
       debugPrint('FCM initialization failed (non-critical): $e');
-    }
-
-    try {
-      debugPrint('🔍 _initUserServices: Initializing location service...');
-      // Initialize location tracking (will request permissions)
-      // Don't fail if location permission is denied
-      // Add timeout to prevent hanging
-      await LocationService.instance
-          .initForUser(uid)
-          .timeout(
-            const Duration(seconds: 10),
-            onTimeout: () {
-              debugPrint(
-                '🔍 _initUserServices: Location service timed out (continuing anyway)',
-              );
-              return false;
-            },
-          );
-      debugPrint(
-        '🔍 _initUserServices: Location service initialized successfully',
-      );
-    } catch (e) {
-      debugPrint('Location service initialization failed (non-critical): $e');
     }
 
     debugPrint('🔍 _initUserServices: Completed');
@@ -152,6 +157,7 @@ class _BootstrapGateState extends State<BootstrapGate> {
         final user = authSnap.data;
         debugPrint('🔍 BootstrapGate: User = ${user?.uid ?? "null"}');
         if (user == null) {
+          _activeUserId = null;
           return FutureBuilder<bool>(
             future: LocalPrefs.hasOnboarded(),
             builder: (context, onboardingSnap) {

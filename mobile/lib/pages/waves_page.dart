@@ -31,9 +31,6 @@ class ActivityPage extends StatelessWidget {
               final waves = waveSnapshot.data ?? const <WaveRequest>[];
               final connections =
                   connectionSnapshot.data ?? const <MutualMatch>[];
-              final loading =
-                  waveSnapshot.connectionState == ConnectionState.waiting ||
-                  connectionSnapshot.connectionState == ConnectionState.waiting;
               return StreamBuilder<SafetyState>(
                 stream: SafetyService.instance.watchSafety(user.uid),
                 builder: (context, safetySnapshot) {
@@ -52,11 +49,6 @@ class ActivityPage extends StatelessWidget {
                         ),
                       )
                       .toList();
-                  final ready =
-                      !loading &&
-                      safetySnapshot.connectionState != ConnectionState.waiting;
-                  final showInitialLoading =
-                      !ready && waves.isEmpty && connections.isEmpty;
                   return CustomScrollView(
                     slivers: [
                       SliverPadding(
@@ -65,9 +57,7 @@ class ActivityPage extends StatelessWidget {
                           delegate: SliverChildListDelegate([
                             const _ActivityHeader(),
                             const SizedBox(height: 38),
-                            if (showInitialLoading)
-                              const SizedBox.shrink()
-                            else if (visibleWaves.isEmpty &&
+                            if (visibleWaves.isEmpty &&
                                 visibleConnections.isEmpty)
                               const _ActivityEmptyState()
                             else ...[
