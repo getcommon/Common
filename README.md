@@ -1,253 +1,109 @@
 # Common Grounds
 
-## Project Description
+Common is a Flutter app for making genuine local friendships through meaningful shared interests and proximity. It is intentionally friendship-first: no dating language, swiping, public exact-location data, or engagement-driven mechanics.
 
-Common Grounds is a Flutter-based mobile application designed to help students connect with each other based on proximity and shared interests. The app uses location-based matching to find nearby students with similar academic interests, hobbies, and study preferences, making it easier for students to form study groups, find study partners, and build meaningful connections on campus.
+## Current product state
 
-### Key Features
+The app currently has the version-one core flow:
 
-- **Proximity-Based Matching**: Automatically finds students nearby using real-time location tracking
-- **Interest-Based Matching**: Connects users based on shared interests, majors, and class years
-- **Wave System**: Users can "wave" at potential matches to express interest
-- **Real-Time Messaging**: Chat with matched users directly within the app
-- **Profile Customization**: Create detailed profiles with interests, vibe tags, and study preferences
-- **Push Notifications**: Get notified about new matches, waves, and messages
-- **Google Maps Integration**: Interactive location picker for precise location sharing
-- **Dark Mode Support**: Beautiful UI with light and dark theme options
+- **Discover** — a warm, editorial nearby-person experience backed by real proximity matching.
+- **Activity** — received waves and mutual connections, replacing the legacy three-tab Waves screen.
+- **Inbox** — mutual conversations and real-time chat.
+- **Profile** — an editorial, identity-first profile with interests and privacy-safe local discoverability.
+- **Settings** — privacy context, blocked members, and account actions separated from the public-facing Profile surface.
+- **Safety** — hide, block, report, and unmatch actions. Blocked members are filtered from Discover, Activity, and Inbox.
 
-## Team Members
+The source of truth for product constraints is [PRODUCT_BRIEF.md](PRODUCT_BRIEF.md). For a detailed handoff and remaining work, start with [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md).
 
-- **Andy Phan** - tmq6ed
-- **Kevin Arleen** - xsu4ju
-- **Sanjay Karunamoorthy** - vmw8vr
+## Design direction
 
-## Builds and Downloads
+- Warm, white-first editorial light mode with restrained terracotta accents.
+- Calm, friendship-first language and reversible actions.
+- Profiles expose only a name, photo, bio, interests, and broad discovery context. Exact coordinates, contact details, school/major, class year, and safety controls are not public profile content.
+- The Profile and Edit Profile screens are now the current visual reference for the personal-account experience.
 
-### Android APK
-- **Release APK**: 
-  - Primary location: `releases/CommonGrounds-release.apk` (52.9 MB)
-  - Build location: `mobile/build/app/outputs/flutter-apk/app-release.apk`
-  - Built successfully and ready for distribution
-  - SHA1 checksum: `a47a310eaf3345fd172b8edc89c1ca35561b8086`
-- **Debug APK**: Available at `mobile/build/app/outputs/flutter-apk/app-debug.apk`
+## Architecture
 
+| Layer | Technology |
+| --- | --- |
+| Mobile client | Flutter / Dart |
+| Identity | Firebase Authentication |
+| App data | Cloud Firestore |
+| Profile media | Firebase Storage |
+| Server workflows | Firebase Cloud Functions v2, Node.js 22 |
+| Notifications | Firebase Cloud Messaging |
+| Location | Geolocator + privacy-preserving geohash/proximity queries |
 
-### Building the App
+The Firebase project configured for this app is `blue4-commongrounds`. Do not commit API keys, testing credentials, or private Firebase configuration beyond the platform config files already required by the app.
 
-To build the Android APK:
-```bash
+## Run locally
+
+Prerequisites: Flutter 3.35.5+ with Dart 3.9.2+, Xcode for iOS, and an authenticated Firebase CLI only when deploying backend changes.
+
+```sh
 cd mobile
-flutter build apk --release
+flutter pub get
+flutter run
 ```
 
-The APK will be located at: `mobile/build/app/outputs/flutter-apk/app-release.apk`
+To target a simulator explicitly:
 
-To build for iOS:
-```bash
+```sh
 cd mobile
-flutter build ios --release
+flutter run -d "iPhone 16 Pro Max"
 ```
 
-## Installation Instructions
+## Verify changes
 
-### Prerequisites
-
-1. **Flutter SDK** (version 3.35.5 or compatible)
-   - Download from [flutter.dev](https://flutter.dev/docs/get-started/install)
-   - Ensure Flutter is added to your PATH
-
-2. **Android Studio** (for Android development)
-   - Download from [developer.android.com](https://developer.android.com/studio)
-   - Install Android SDK and required tools
-
-3. **Xcode** (for iOS development - macOS only)
-   - Available on the Mac App Store
-
-4. **Firebase Account**
-   - The app uses Firebase for authentication, database, and cloud functions
-   - Firebase project: `blue4-commongrounds`
-
-5. **Google Maps API Key** (optional but recommended)
-   - Add your API key to `mobile/android/app/src/main/AndroidManifest.xml`
-   - See the [Google Maps Flutter documentation](https://pub.dev/packages/google_maps_flutter) for setup instructions
-
-### Setup Steps
-
-1. **Clone the repository**
-   ```bash
-   git clone <repository-url>
-   cd capstone-blue-4
-   ```
-
-2. **Navigate to the mobile directory**
-   ```bash
-   cd mobile
-   ```
-
-3. **Install Flutter dependencies**
-   ```bash
-   flutter pub get
-   ```
-
-4. **Configure Firebase**
-   - The Firebase configuration files are already included in the project
-   - Ensure you have access to the Firebase project: `blue4-commongrounds`
-   - Firebase configuration is located in:
-     - Android: `mobile/android/app/google-services.json`
-     - iOS: `mobile/ios/Runner/GoogleService-Info.plist` (if available)
-
-5. **Set up Google Maps (Optional)**
-   - Add your Google Maps API key to `mobile/android/app/src/main/AndroidManifest.xml`
-   - See the [Google Maps Flutter documentation](https://pub.dev/packages/google_maps_flutter) for detailed setup instructions
-
-6. **Run the app**
-   ```bash
-   flutter run
-   ```
-
-### Additional Setup
-
-#### Firebase Cloud Functions
-If you need to set up or deploy cloud functions:
-```bash
-cd mobile/functions
-npm install
-firebase deploy --only functions
-```
-
-#### Firebase Emulators (for local development)
-```bash
+```sh
 cd mobile
-firebase emulators:start
-```
-
-## User Accounts for Testing
-Username: commmonask3@gmail.com
-Password: Commonask3$$$
-
-### Creating Test Accounts
-1. Launch the app
-2. Tap "Sign in with Google" or "Sign in with Apple"
-3. Complete the profile setup:
-   - Add your display name
-   - Select interests
-   - Add vibe tags
-   - Set your location (optional)
-   - Add bio, major, and class year (optional)
-
-## Usage Instructions
-
-### Getting Started
-
-1. **Sign In**
-   - Open the app
-   - Choose to sign in with Google or Apple
-   - Grant necessary permissions (location, notifications)
-
-2. **Complete Your Profile**
-   - Add your display name and photo
-   - Select your interests from the available categories
-   - Choose vibe tags that describe your study style and personality
-   - Optionally add your major, class year, and bio
-   - Set your location (you can use GPS or pick on map)
-
-3. **Discover Matches**
-   - The Home tab shows nearby students with similar interests
-   - View their profiles, interests, and compatibility scores
-   - Use the search radius slider to adjust how far to search
-
-4. **Wave at Matches**
-   - Tap the "Wave" button on a user's profile to express interest
-   - If they wave back, you'll get a mutual match!
-   - View your waves and matches in the Waves tab
-
-5. **Chat with Matches**
-   - Once you have a mutual match, you can start chatting
-   - Access conversations from the Messages tab
-   - Send messages, photos, and react to messages
-
-6. **Update Your Profile**
-   - Go to the Profile tab to edit your information
-   - Update your location, interests, or vibe tags anytime
-   - Change your search radius to find more or fewer matches
-
-### Key Features Explained
-
-- **Home Tab**: Discover nearby students, view quick stats, and see potential matches
-- **Waves Tab**: View all your sent and received waves, and manage mutual matches
-- **Messages Tab**: Chat with your matches in real-time
-- **Profile Tab**: Edit your profile, update location, and adjust settings
-
-### Tips for Best Experience
-
-- Keep your location updated for accurate matching
-- Add multiple interests to increase match potential
-- Use vibe tags to find study partners with compatible study styles
-- Respond to waves promptly to build connections
-- Update your profile regularly to keep it fresh
-
-## Technical Details
-
-### Tech Stack
-
-- **Frontend**: Flutter (Dart)
-- **Backend**: Firebase (Firestore, Authentication, Cloud Functions, Cloud Messaging)
-- **State Management**: Riverpod
-- **Location Services**: Geolocator, Google Maps Flutter
-- **Authentication**: Firebase Auth (Google Sign-In, Apple Sign-In)
-
-### Project Structure
-
-```
-mobile/
-├── lib/
-│   ├── core/           # Theme, widgets, constants
-│   ├── models/         # Data models
-│   ├── pages/          # App screens
-│   ├── services/       # Business logic and Firebase services
-│   ├── utils/          # Utility functions
-│   └── widgets/        # Reusable widgets
-├── android/            # Android-specific code
-├── ios/                # iOS-specific code
-├── functions/          # Firebase Cloud Functions
-└── dataconnect/        # Firebase Data Connect schema
-```
-
-### Firebase Services Used
-
-- **Firebase Authentication**: User sign-in (Google, Apple)
-- **Cloud Firestore**: User profiles, messages, waves, matches
-- **Firebase Cloud Messaging**: Push notifications
-- **Firebase Storage**: Profile photos and media
-- **Firebase Cloud Functions**: Server-side matching and processing
-- **Firebase Data Connect**: GraphQL-based data layer (experimental)
-
-## Development
-
-### Running Tests
-```bash
-cd mobile
+flutter analyze
 flutter test
 ```
 
-### Code Analysis
-```bash
-cd mobile
-flutter analyze
+For a focused UI change, analyze the files you edited as well:
+
+```sh
+dart analyze lib/pages/profile_page.dart lib/pages/profile_setup_page.dart
 ```
 
-### Format Code
-```bash
-cd mobile
-dart format .
+## Firebase Functions
+
+Functions live in `mobile/functions/` and use Node.js 22 with `firebase-functions` 7.4.x.
+
+```sh
+cd mobile/functions
+npm install
+npm run build
+firebase deploy --only functions
 ```
+
+Key callable workflows include `sendWave`, `respondToWave`, `findNearbyMatches`, and `getUserProfile`. Before changing wave rules, preserve the server/client contract and update both matching tests and Firestore rules as appropriate.
+
+## Repository map
+
+```text
+mobile/
+├── lib/
+│   ├── app_shell.dart                # Persistent four-tab navigation
+│   ├── pages/                        # Discover, Activity, Inbox, Profile, Settings
+│   ├── services/                     # Firebase, matching, location, messaging, safety
+│   ├── models/                       # Firestore-backed data models
+│   ├── core/theme/                   # Color, spacing, and typography tokens
+│   └── widgets/                      # Shared UI components
+├── functions/                        # Firebase Functions v2 (Node.js 22)
+├── firestore.rules                   # Firestore access policy
+└── pubspec.yaml                      # Flutter dependencies and assets
+```
+
+## Next work
+
+1. Bundle and apply the selected editorial typography system consistently across the app (the recommended cross-platform choice is DM Sans; it is not installed yet).
+2. Build the onboarding and location-permission flow around deliberate discoverability and coarse-location privacy.
+3. Add server-side enforcement for the daily three-wave cap and tests for races/bypass attempts.
+4. Complete the dark-mode pass for the redesigned screens.
+5. Exercise the full flow using two real nearby test accounts: Discover → wave → mutual → Activity → Inbox.
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-Copyright (c) 2025 Andy Phan, Kevin Arleen, Sanjay Karunamoorthy
-
-## Contact
-
-For questions or issues, please contact the development team or open an issue in the repository.
+MIT. See [LICENSE](LICENSE).

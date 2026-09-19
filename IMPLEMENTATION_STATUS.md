@@ -1,6 +1,6 @@
 # Common — Implementation Status
 
-Last updated: 2026-09-15
+Last updated: 2026-09-19
 
 `PRODUCT_BRIEF.md` is the product source of truth. The current implementation is a light-mode-first pass of the core, friendship-first flow.
 
@@ -12,17 +12,21 @@ Last updated: 2026-09-15
 - **Waves:** Added a daily three-wave allowance to the Discover UI and client write path. The count includes every wave sent today. A Firestore index was added for this count.
 - **Activity:** Replaced the former tabbed Waves screen with a timeline for mutual connections and incoming waves. A mutual wave opens a quiet connection sheet with a conversation action.
 - **Inbox and chat:** Restyled the mutual-conversations Inbox and conversation detail screen while preserving existing real-time messages and read tracking.
-- **Profile:** Rebuilt the Profile tab around identity, interests, discoverability, radius, and privacy guidance. Exact coordinates, email, major, and class year are no longer displayed. The editor preserves location, radius, and vibe tags when it saves.
+- **Profile and settings:** Profile is now an editorial identity-first surface: photo, name, bio, interests, and a compact privacy-safe discovery row. Major and class year are not shown. Privacy guidance, blocked members, and account actions live in the dedicated Settings page.
+- **Edit Profile:** Replaced the legacy card-heavy editor with a calm editorial form: back-to-Profile action, Save action, compact photo control, underline fields, soft interest chips, and on-demand interest/vibe pickers. The editor still preserves location, radius, and vibe tags when it saves.
+- **Safety:** Implemented hide, block, report, and unmatch flows through `SafetyService`. Blocked members are excluded from Discover, Activity, and Inbox.
+- **Functions runtime:** Firebase Functions now use Node.js 22 and `firebase-functions` 7.4.x. The current functions deployment completed successfully.
 - **Radius:** Version-one discovery is capped at the brief’s preferred `under 0.5 mi` range (`0.8 km` internally).
 
 ## Important implementation notes
 
 - `mobile/lib/data/discover_profiles.dart` maps a live `ProximityMatch` into public-profile presentation data. It also contains Eren’s debug fixture and portrait.
 - `mobile/lib/pages/home_page.dart` is Discover; `waves_page.dart` is Activity; `conversations_page.dart` is Inbox; `chat_detail_page.dart` is the conversation detail screen.
-- `mobile/lib/pages/profile_page.dart` is the current privacy-safe profile/settings surface. `profile_setup_page.dart` is the editor.
+- `mobile/lib/pages/profile_page.dart` is the current editorial profile surface; `profile_setup_page.dart` is the editor; `settings_page.dart` owns private account and safety controls.
 - The daily Wave cap is currently **client-enforced** in `WaveService`. Before production, enforce it server-side as well to prevent bypasses or races.
 - Age is optional in the presentation model because `UserProfile` does not yet store an age/date of birth. Do not derive an age from legacy academic fields.
 - Dark-mode support has not been completed for the new screens. Several new surfaces intentionally use the approved warm light palette.
+- The visual mock typography is not yet a bundled app font. The current recommendation is to add DM Sans as a cross-platform asset and apply it through `AppTypography`.
 - The existing app needs at least two active, nearby accounts with enough shared interests to demonstrate live discovery. Eren is only a debug fallback.
 
 ## Verification run today
@@ -41,8 +45,8 @@ The analyzer and each focused suite passed after the corresponding changes.
 
 ## Suggested next steps
 
-1. Build the onboarding and location-permission flow around discoverability, coarse-location privacy, and the 0.5-mile default.
-2. Add working safety controls: hide, block, report, and unmatch. These are required by the product brief and currently only described in Profile copy.
-3. Enforce the daily Wave limit on the server and add tests for the new matching thresholds and daily-count behavior.
-4. Complete a dark-mode styling pass across Discover, Activity, Inbox, conversation detail, and Profile.
-5. Remove or migrate remaining legacy student/campus language outside the redesigned tabs, especially older onboarding and any unused flows.
+1. Bundle and apply the editorial typography system consistently across the app (DM Sans is the current recommendation).
+2. Build the onboarding and location-permission flow around deliberate discoverability, coarse-location privacy, and the 0.5-mile default.
+3. Enforce the daily Wave limit on the server and add tests for matching thresholds and daily-count behavior.
+4. Complete a dark-mode styling pass across Discover, Activity, Inbox, conversation detail, Profile, Settings, and Edit Profile.
+5. Exercise the entire flow with two real nearby test accounts, then remove or migrate remaining legacy student/campus language in older onboarding or unused paths.
