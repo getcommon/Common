@@ -17,6 +17,9 @@ class UserProfile {
   final DateTime updatedAt;
   final UserLocation? location;
   final double? searchRadiusKm; // User's preferred search radius
+  /// New members explicitly review discoverability before entering Discover.
+  /// Missing values are treated as complete for existing accounts.
+  final bool hasCompletedDiscoverySetup;
 
   const UserProfile({
     required this.uid,
@@ -31,6 +34,7 @@ class UserProfile {
     required this.updatedAt,
     this.location,
     this.searchRadiusKm,
+    this.hasCompletedDiscoverySetup = false,
   });
 
   bool get isComplete =>
@@ -111,6 +115,7 @@ class UserProfile {
     'updatedAt': updatedAt.millisecondsSinceEpoch,
     if (location != null) 'location': location!.toMap(),
     if (searchRadiusKm != null) 'searchRadiusKm': searchRadiusKm,
+    'hasCompletedDiscoverySetup': hasCompletedDiscoverySetup,
   };
 
   factory UserProfile.fromMap(Map<String, dynamic> m) {
@@ -140,6 +145,8 @@ class UserProfile {
           ? UserLocation.fromMap(m['location'] as Map<String, dynamic>)
           : null,
       searchRadiusKm: m['searchRadiusKm'] as double?,
+      hasCompletedDiscoverySetup:
+          m['hasCompletedDiscoverySetup'] as bool? ?? true,
     );
   }
 }

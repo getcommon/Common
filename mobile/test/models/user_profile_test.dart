@@ -45,6 +45,16 @@ void main() {
       expect(profile.vibeTags, isEmpty);
       expect(profile.location, isNull);
       expect(profile.searchRadiusKm, isNull);
+      expect(profile.hasCompletedDiscoverySetup, isTrue);
+    });
+
+    test('requires discovery setup when explicitly marked incomplete', () {
+      final profile = UserProfile.fromMap({
+        'uid': 'new-user',
+        'hasCompletedDiscoverySetup': false,
+      });
+
+      expect(profile.hasCompletedDiscoverySetup, isFalse);
     });
 
     test('should throw on missing uid', () {
@@ -102,6 +112,10 @@ void main() {
       expect(restored.displayName, original.displayName);
       expect(restored.interests, original.interests);
       expect(restored.vibeTags, original.vibeTags);
+      expect(
+        restored.hasCompletedDiscoverySetup,
+        original.hasCompletedDiscoverySetup,
+      );
     });
   });
 
@@ -138,16 +152,19 @@ void main() {
       expect(profile.effectiveSearchRadiusKm, isPositive);
     });
 
-    test('effectiveSearchRadiusKm should clamp a provided value to the cap', () {
-      final profile = UserProfile(
-        uid: 'user1',
-        searchRadiusKm: 3.0,
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-      );
+    test(
+      'effectiveSearchRadiusKm should clamp a provided value to the cap',
+      () {
+        final profile = UserProfile(
+          uid: 'user1',
+          searchRadiusKm: 3.0,
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        );
 
-      expect(profile.effectiveSearchRadiusKm, kMaxSearchRadiusKm);
-    });
+        expect(profile.effectiveSearchRadiusKm, kMaxSearchRadiusKm);
+      },
+    );
   });
 
   group('UserLocation.fromMap', () {

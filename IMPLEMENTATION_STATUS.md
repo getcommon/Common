@@ -17,13 +17,14 @@ Last updated: 2026-09-19
 - **Safety:** Implemented hide, block, report, and unmatch flows through `SafetyService`. Blocked members are excluded from Discover, Activity, and Inbox.
 - **Functions runtime:** Firebase Functions now use Node.js 22 and `firebase-functions` 7.4.x. The current functions deployment completed successfully.
 - **Radius:** Version-one discovery is capped at the brief’s preferred `under 0.5 mi` range (`0.8 km` internally).
+- **Discoverability onboarding:** After a new member completes their profile, Common presents an explicit nearby-discovery choice. Location permission is requested only when they choose to enable it; “Not now” keeps discovery paused, and permanent denial has a device-settings recovery path.
 
 ## Important implementation notes
 
 - `mobile/lib/data/discover_profiles.dart` maps a live `ProximityMatch` into public-profile presentation data. It also contains Eren’s debug fixture and portrait.
 - `mobile/lib/pages/home_page.dart` is Discover; `waves_page.dart` is Activity; `conversations_page.dart` is Inbox; `chat_detail_page.dart` is the conversation detail screen.
 - `mobile/lib/pages/profile_page.dart` is the current editorial profile surface; `profile_setup_page.dart` is the editor; `settings_page.dart` owns private account and safety controls.
-- The daily Wave cap is currently **client-enforced** in `WaveService`. Before production, enforce it server-side as well to prevent bypasses or races.
+- The daily Wave cap is enforced in the `sendWave` callable transaction as well as reflected in the client UI. Add emulator coverage for concurrent sends before production.
 - Age is optional in the presentation model because `UserProfile` does not yet store an age/date of birth. Do not derive an age from legacy academic fields.
 - Dark-mode support has not been completed for the new screens. Several new surfaces intentionally use the approved warm light palette.
 - The visual mock typography is not yet a bundled app font. The current recommendation is to add DM Sans as a cross-platform asset and apply it through `AppTypography`.
@@ -46,7 +47,7 @@ The analyzer and each focused suite passed after the corresponding changes.
 ## Suggested next steps
 
 1. Bundle and apply the editorial typography system consistently across the app (DM Sans is the current recommendation).
-2. Build the onboarding and location-permission flow around deliberate discoverability, coarse-location privacy, and the 0.5-mile default.
-3. Enforce the daily Wave limit on the server and add tests for matching thresholds and daily-count behavior.
+2. Add server-side freshness/expiry enforcement for presence, then test permission denial, enabling, backgrounding, and returning to the app.
+3. Add emulator coverage for daily wave races and matching thresholds.
 4. Complete a dark-mode styling pass across Discover, Activity, Inbox, conversation detail, Profile, Settings, and Edit Profile.
 5. Exercise the entire flow with two real nearby test accounts, then remove or migrate remaining legacy student/campus language in older onboarding or unused paths.

@@ -49,6 +49,7 @@ class _SearchRadiusSettingsState extends State<SearchRadiusSettings> {
         updatedAt: DateTime.now(),
         location: widget.profile.location,
         searchRadiusKm: newRadius,
+        hasCompletedDiscoverySetup: widget.profile.hasCompletedDiscoverySetup,
       );
 
       await ProfileService.instance.upsertProfile(updatedProfile);

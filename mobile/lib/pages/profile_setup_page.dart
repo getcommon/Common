@@ -204,6 +204,7 @@ class _ProfileSetupPageState extends State<ProfileSetupPage> {
         updatedAt: DateTime.now(),
         location: widget.profile.location,
         searchRadiusKm: widget.profile.searchRadiusKm,
+        hasCompletedDiscoverySetup: widget.profile.hasCompletedDiscoverySetup,
       );
       await ProfileService.instance.upsertProfile(p);
 

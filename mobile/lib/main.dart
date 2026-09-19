@@ -11,6 +11,7 @@ import 'onboarding/onboarding_page.dart';
 import 'services/profile_service.dart';
 import 'models/user_profile.dart';
 import 'pages/profile_setup_page.dart';
+import 'pages/discoverability_setup_page.dart';
 import 'services/messaging_service.dart';
 import 'services/location_service.dart';
 import 'services/local_prefs.dart';
@@ -255,6 +256,9 @@ class _BootstrapGateState extends State<BootstrapGate>
                           updatedAt: DateTime.now(),
                         ),
                   );
+                }
+                if (!profile.hasCompletedDiscoverySetup) {
+                  return DiscoverabilitySetupPage(profile: profile);
                 }
                 debugPrint(
                   '🔍 BootstrapGate: Profile complete, showing AppShell',

@@ -99,8 +99,8 @@ mobile/
 ## Next work
 
 1. Bundle and apply the selected editorial typography system consistently across the app (the recommended cross-platform choice is DM Sans; it is not installed yet).
-2. Build the onboarding and location-permission flow around deliberate discoverability and coarse-location privacy.
-3. Add server-side enforcement for the daily three-wave cap and tests for races/bypass attempts.
+2. Add server-side presence freshness/expiry enforcement and test permission denial, enabling, backgrounding, and return behavior.
+3. Add emulator tests for daily-wave races/bypass attempts and matching thresholds.
 4. Complete the dark-mode pass for the redesigned screens.
 5. Exercise the full flow using two real nearby test accounts: Discover → wave → mutual → Activity → Inbox.
 

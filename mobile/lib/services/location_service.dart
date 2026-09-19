@@ -373,6 +373,13 @@ class LocationService {
     return status.isGranted || status.isLimited;
   }
 
+  /// Lets the UI tailor recovery copy without triggering an OS prompt.
+  Future<PermissionStatus> locationPermissionStatus() =>
+      Permission.locationWhenInUse.status;
+
+  /// Used only after a member chooses to recover from a permanent denial.
+  Future<bool> openLocationSettings() => openAppSettings();
+
   /// Manually refresh location now
   Future<void> refreshLocation() async {
     await _updateUserLocation();

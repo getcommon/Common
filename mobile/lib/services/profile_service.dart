@@ -45,6 +45,13 @@ class ProfileService {
     await _doc(p.uid).set(payload, SetOptions(merge: true));
   }
 
+  /// Records that a member has made an intentional discoverability choice.
+  /// This is separate from visibility, since choosing "Not now" is valid.
+  Future<void> completeDiscoverySetup(String uid) => _doc(uid).set({
+    'hasCompletedDiscoverySetup': true,
+    'updatedAt': DateTime.now().millisecondsSinceEpoch,
+  }, SetOptions(merge: true));
+
   Future<void> ensureDoc(
     String uid, {
     String? displayName,
@@ -62,6 +69,7 @@ class ProfileService {
         'classYear': null,
         'major': null,
         'interests': <String>[],
+        'hasCompletedDiscoverySetup': false,
         'createdAt': now.millisecondsSinceEpoch,
         'updatedAt': now.millisecondsSinceEpoch,
       });
