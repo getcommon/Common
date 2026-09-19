@@ -8,6 +8,7 @@ import 'package:mobile/services/profile_service.dart';
 import 'package:mobile/core/widgets/avatar.dart';
 import 'package:mobile/constants/interest_categories.dart';
 import 'package:mobile/constants/vibe_tags.dart';
+import 'package:mobile/core/theme/app_colors.dart';
 import 'package:mobile/utils/interest_utils.dart';
 
 class ProfileSetupPage extends StatefulWidget {
@@ -28,6 +29,7 @@ class _ProfileSetupPageState extends State<ProfileSetupPage> {
   String? _error;
   bool _showCustomInterestField = false;
   bool _showVibeTags = false; // Collapsible vibe tag section
+  bool _showInterestPicker = false;
   File? _newProfileImage; // New image selected from gallery/camera
   String? _profileImageUrl; // Current image URL from profile
 
@@ -235,10 +237,34 @@ class _ProfileSetupPageState extends State<ProfileSetupPage> {
     final validationError = validateInterestSelection(_interests.toList());
     final canSave = validationError == null;
     return Scaffold(
-      appBar: AppBar(title: const Text('Edit profile')),
+      appBar: AppBar(
+        automaticallyImplyLeading: false,
+        leadingWidth: 94,
+        leading: TextButton(
+          onPressed: () => Navigator.of(context).maybePop(),
+          style: TextButton.styleFrom(
+            foregroundColor: AppColors.textSecondaryLight,
+            padding: const EdgeInsets.only(left: 16),
+            alignment: Alignment.centerLeft,
+          ),
+          child: const Text('‹ Profile'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: (!canSave || _saving) ? null : _save,
+            child: _saving
+                ? const SizedBox.square(
+                    dimension: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Text('Save'),
+          ),
+          const SizedBox(width: 8),
+        ],
+      ),
       body: SafeArea(
         child: ListView(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.fromLTRB(24, 18, 24, 40),
           children: [
             if (_error != null)
               Padding(
@@ -246,180 +272,234 @@ class _ProfileSetupPageState extends State<ProfileSetupPage> {
                 child: Text(_error!, style: const TextStyle(color: Colors.red)),
               ),
 
-            // Profile picture editor
-            Center(
-              child: Column(
-                children: [
-                  Stack(
-                    children: [
-                      // Show either new image, current image, or default avatar
-                      if (_newProfileImage != null)
-                        CircleAvatar(
-                          radius: 60,
-                          backgroundImage: FileImage(_newProfileImage!),
-                        )
-                      else
-                        AppAvatar(
-                          imageUrl: _profileImageUrl,
-                          displayName: _name.text.isNotEmpty
-                              ? _name.text
-                              : widget.profile.displayName,
-                          size: 120,
-                        ),
-                      // Edit button overlay
-                      Positioned(
-                        bottom: 0,
-                        right: 0,
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: Theme.of(context).colorScheme.primary,
-                            shape: BoxShape.circle,
-                          ),
-                          child: IconButton(
-                            icon: const Icon(
-                              Icons.camera_alt,
-                              color: Colors.white,
-                            ),
-                            onPressed: _showImageSourceDialog,
-                            tooltip: 'Change profile picture',
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Tap camera to change photo',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ],
+            Text(
+              'Edit profile',
+              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                fontSize: 28,
+                height: 1.1,
+                fontWeight: FontWeight.w500,
+                letterSpacing: -0.7,
               ),
             ),
+            const SizedBox(height: 7),
+            Text(
+              'A few details make it easier to find your people.',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: AppColors.textSecondaryLight,
+              ),
+            ),
+            const SizedBox(height: 26),
+            Row(
+              children: [
+                if (_newProfileImage != null)
+                  CircleAvatar(
+                    radius: 34,
+                    backgroundImage: FileImage(_newProfileImage!),
+                  )
+                else
+                  AppAvatar(
+                    imageUrl: _profileImageUrl,
+                    displayName: _name.text.isNotEmpty
+                        ? _name.text
+                        : widget.profile.displayName,
+                    size: 68,
+                  ),
+                const SizedBox(width: 14),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Your photo',
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: _showImageSourceDialog,
+                      style: TextButton.styleFrom(
+                        foregroundColor: AppColors.primary,
+                        padding: const EdgeInsets.only(top: 2, bottom: 2),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      child: const Text('Change photo'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
             const SizedBox(height: 24),
-
+            const Divider(height: 1),
+            const SizedBox(height: 22),
+            const _EditorialLabel('The essentials'),
+            const SizedBox(height: 13),
             TextField(
               controller: _name,
-              decoration: const InputDecoration(labelText: 'Display name'),
+              decoration: _editorInputDecoration('Display name'),
+              textCapitalization: TextCapitalization.words,
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 17),
             TextField(
               controller: _bio,
-              decoration: const InputDecoration(labelText: 'Bio (optional)'),
+              decoration: _editorInputDecoration('A little about you'),
               maxLines: 3,
             ),
-            const SizedBox(height: 16),
-
-            // Interest selection header with count
+            const SizedBox(height: 24),
+            const Divider(height: 1),
+            const SizedBox(height: 22),
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text(
-                  'Select your interests',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                ),
+                const _EditorialLabel('Into lately'),
+                const Spacer(),
                 Text(
                   '${_interests.length} selected',
-                  style: TextStyle(
-                    color: _interests.length >= 5
-                        ? Colors.green
-                        : Colors.orange,
-                    fontWeight: FontWeight.bold,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: AppColors.textSecondaryLight,
                   ),
                 ),
               ],
             ),
+            const SizedBox(height: 11),
             if (_interests.length < 5)
               Padding(
-                padding: const EdgeInsets.only(top: 4),
+                padding: const EdgeInsets.only(bottom: 10),
                 child: Text(
-                  'Select at least 5 interests from 2+ categories',
-                  style: TextStyle(color: Colors.orange.shade700, fontSize: 12),
+                  'Choose at least 5 interests from two or more categories.',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: AppColors.textSecondaryLight,
+                  ),
                 ),
               ),
-            const SizedBox(height: 12),
 
-            // Categorized interest selection
-            ...InterestCategory.values.map((category) {
-              final categoryInterests = kCategorizedInterests[category] ?? [];
-              final selectedInCategory = _interests
-                  .where((i) => categoryInterests.contains(i))
-                  .length;
-              final isExpanded = _expandedCategories[category] ?? false;
-
-              return Card(
-                margin: const EdgeInsets.only(bottom: 8),
-                child: Column(
-                  children: [
-                    ListTile(
-                      leading: Text(
-                        category.emoji,
-                        style: const TextStyle(fontSize: 24),
-                      ),
-                      title: Text(category.displayName),
-                      subtitle: Text(
-                        '$selectedInCategory selected',
-                        style: TextStyle(
-                          color: selectedInCategory > 0
-                              ? Colors.green
-                              : Colors.grey,
+            if (_interests.isNotEmpty)
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: _interests
+                    .map(
+                      (interest) => InputChip(
+                        label: Text(interest),
+                        onPressed: () =>
+                            setState(() => _interests.remove(interest)),
+                        selected: true,
+                        selectedColor: const Color(0xFFF4E3DB),
+                        showCheckmark: false,
+                        labelStyle: const TextStyle(
+                          color: AppColors.primaryDark,
+                          fontWeight: FontWeight.w600,
                         ),
+                        side: BorderSide.none,
+                        shape: const StadiumBorder(),
                       ),
-                      trailing: Icon(
-                        isExpanded
-                            ? Icons.keyboard_arrow_up
-                            : Icons.keyboard_arrow_down,
-                      ),
-                      onTap: () {
-                        setState(() {
-                          _expandedCategories[category] = !isExpanded;
-                        });
-                      },
+                    )
+                    .toList(),
+              ),
+            const SizedBox(height: 7),
+            TextButton.icon(
+              icon: Icon(
+                _showInterestPicker
+                    ? Icons.keyboard_arrow_up_rounded
+                    : Icons.add_rounded,
+                size: 18,
+              ),
+              label: Text(
+                _showInterestPicker ? 'Hide interests' : 'Add interest',
+              ),
+              style: TextButton.styleFrom(foregroundColor: AppColors.primary),
+              onPressed: () =>
+                  setState(() => _showInterestPicker = !_showInterestPicker),
+            ),
+            if (_showInterestPicker) ...[
+              const SizedBox(height: 8),
+              // Categorized interest selection stays tucked away until wanted.
+              ...InterestCategory.values.map((category) {
+                final categoryInterests = kCategorizedInterests[category] ?? [];
+                final selectedInCategory = _interests
+                    .where((i) => categoryInterests.contains(i))
+                    .length;
+                final isExpanded = _expandedCategories[category] ?? false;
+
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  decoration: const BoxDecoration(
+                    border: Border(
+                      bottom: BorderSide(color: AppColors.dividerLight),
                     ),
-                    if (isExpanded)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 8,
+                  ),
+                  child: Column(
+                    children: [
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: Text(
+                          category.displayName,
+                          style: const TextStyle(fontWeight: FontWeight.w500),
                         ),
-                        child: Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: [
-                            for (final interest in categoryInterests)
-                              FilterChip(
-                                label: Text(interest),
-                                selected: _interests.contains(interest),
-                                onSelected: (selected) {
-                                  setState(() {
+                        subtitle: Text(
+                          '$selectedInCategory selected',
+                          style: TextStyle(
+                            color: selectedInCategory > 0
+                                ? AppColors.primary
+                                : AppColors.textSecondaryLight,
+                          ),
+                        ),
+                        trailing: Icon(
+                          isExpanded
+                              ? Icons.keyboard_arrow_up
+                              : Icons.keyboard_arrow_down,
+                        ),
+                        onTap: () {
+                          setState(() {
+                            _expandedCategories[category] = !isExpanded;
+                          });
+                        },
+                      ),
+                      if (isExpanded)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
+                          child: Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
+                              for (final interest in categoryInterests)
+                                _InterestChoiceChip(
+                                  label: interest,
+                                  selected: _interests.contains(interest),
+                                  onSelected: (selected) => setState(() {
                                     if (selected) {
                                       _interests.add(interest);
                                     } else {
                                       _interests.remove(interest);
                                     }
-                                  });
-                                },
-                              ),
-                          ],
+                                  }),
+                                ),
+                            ],
+                          ),
                         ),
-                      ),
-                  ],
-                ),
-              );
-            }),
+                    ],
+                  ),
+                );
+              }),
+            ],
 
             // Show custom interests that don't fit predefined categories
             if (_interests.any((interest) => !kAllInterests.contains(interest)))
-              Card(
+              Container(
                 margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.only(top: 8, bottom: 12),
+                decoration: const BoxDecoration(
+                  border: Border(
+                    bottom: BorderSide(color: AppColors.dividerLight),
+                  ),
+                ),
                 child: Padding(
                   padding: const EdgeInsets.all(12),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        'Custom Interests',
-                        style: TextStyle(fontWeight: FontWeight.bold),
-                      ),
+                      const _EditorialLabel('Custom interests'),
                       const SizedBox(height: 8),
                       Wrap(
                         spacing: 8,
@@ -431,18 +511,20 @@ class _ProfileSetupPageState extends State<ProfileSetupPage> {
                             FilterChip(
                               label: Text(customInterest),
                               selected: true,
-                              deleteIcon: const Icon(Icons.close, size: 18),
+                              showCheckmark: false,
+                              selectedColor: const Color(0xFFF4E3DB),
+                              side: BorderSide.none,
+                              shape: const StadiumBorder(),
+                              labelStyle: const TextStyle(
+                                color: AppColors.primaryDark,
+                                fontWeight: FontWeight.w600,
+                              ),
                               onSelected: (selected) {
                                 if (!selected) {
                                   setState(() {
                                     _interests.remove(customInterest);
                                   });
                                 }
-                              },
-                              onDeleted: () {
-                                setState(() {
-                                  _interests.remove(customInterest);
-                                });
                               },
                             ),
                         ],
@@ -452,10 +534,11 @@ class _ProfileSetupPageState extends State<ProfileSetupPage> {
                 ),
               ),
 
-            // "Add custom interest" button
-            OutlinedButton.icon(
+            // Keep custom interests available without giving them their own card.
+            TextButton.icon(
               icon: const Icon(Icons.add),
               label: const Text('Add custom interest'),
+              style: TextButton.styleFrom(foregroundColor: AppColors.primary),
               onPressed: () {
                 setState(() {
                   _showCustomInterestField = !_showCustomInterestField;
@@ -470,8 +553,8 @@ class _ProfileSetupPageState extends State<ProfileSetupPage> {
                   Expanded(
                     child: TextField(
                       controller: _customInterest,
-                      decoration: const InputDecoration(
-                        labelText: 'Custom interest',
+                      decoration: _editorInputDecoration(
+                        'Custom interest',
                         hintText: 'e.g., Ultimate Frisbee',
                       ),
                       textCapitalization: TextCapitalization.words,
@@ -487,28 +570,32 @@ class _ProfileSetupPageState extends State<ProfileSetupPage> {
                 ],
               ),
             ],
-            const SizedBox(height: 24),
+            const SizedBox(height: 22),
+            const Divider(height: 1),
+            const SizedBox(height: 22),
 
-            // Vibe Tags Section (Optional)
-            Card(
+            // Vibe tags are optional context, kept deliberately quiet.
+            Container(
               margin: const EdgeInsets.only(bottom: 16),
+              decoration: const BoxDecoration(
+                border: Border(
+                  bottom: BorderSide(color: AppColors.dividerLight),
+                ),
+              ),
               child: Column(
                 children: [
                   ListTile(
-                    leading: const Text('✨', style: TextStyle(fontSize: 24)),
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.auto_awesome_outlined),
                     title: const Text(
-                      'Add Your Vibe (Optional)',
-                      style: TextStyle(fontWeight: FontWeight.bold),
+                      'A little more context',
+                      style: TextStyle(fontWeight: FontWeight.w600),
                     ),
                     subtitle: Text(
                       _vibeTags.isEmpty
-                          ? 'Get +30% profile boost! ${_vibeTags.length} selected'
+                          ? 'Optional vibe tags'
                           : '${_vibeTags.length} vibe tags selected',
-                      style: TextStyle(
-                        color: _vibeTags.length >= VibeTags.minRecommendedTags
-                            ? Colors.green
-                            : Colors.orange,
-                      ),
+                      style: TextStyle(color: AppColors.textSecondaryLight),
                     ),
                     trailing: Icon(
                       _showVibeTags
@@ -567,6 +654,20 @@ class _ProfileSetupPageState extends State<ProfileSetupPage> {
                                       return FilterChip(
                                         label: Text(tag.displayText),
                                         selected: isSelected,
+                                        showCheckmark: false,
+                                        selectedColor: const Color(0xFFF4E3DB),
+                                        backgroundColor:
+                                            AppColors.surfaceVariantLight,
+                                        side: BorderSide.none,
+                                        shape: const StadiumBorder(),
+                                        labelStyle: TextStyle(
+                                          color: isSelected
+                                              ? AppColors.primaryDark
+                                              : AppColors.textPrimaryLight,
+                                          fontWeight: isSelected
+                                              ? FontWeight.w600
+                                              : FontWeight.w400,
+                                        ),
                                         onSelected: (selected) {
                                           setState(() {
                                             if (selected) {
@@ -589,20 +690,74 @@ class _ProfileSetupPageState extends State<ProfileSetupPage> {
                 ],
               ),
             ),
-
-            FilledButton(
-              onPressed: (!canSave || _saving) ? null : _save,
-              child: _saving
-                  ? const SizedBox(
-                      height: 18,
-                      width: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Text('Save & Continue'),
-            ),
           ],
         ),
       ),
     );
   }
+}
+
+InputDecoration _editorInputDecoration(String label, {String? hintText}) {
+  const border = UnderlineInputBorder(
+    borderSide: BorderSide(color: AppColors.dividerLight),
+  );
+  return InputDecoration(
+    labelText: label,
+    hintText: hintText,
+    floatingLabelBehavior: FloatingLabelBehavior.always,
+    labelStyle: const TextStyle(
+      color: AppColors.textPrimaryLight,
+      fontSize: 13,
+    ),
+    hintStyle: const TextStyle(color: AppColors.textDisabledLight),
+    contentPadding: const EdgeInsets.only(bottom: 8),
+    enabledBorder: border,
+    focusedBorder: const UnderlineInputBorder(
+      borderSide: BorderSide(color: AppColors.primary, width: 1.5),
+    ),
+  );
+}
+
+class _EditorialLabel extends StatelessWidget {
+  const _EditorialLabel(this.label);
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => Text(
+    label,
+    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+      color: AppColors.textSecondaryLight,
+      fontWeight: FontWeight.w600,
+      letterSpacing: 1.1,
+    ),
+  );
+}
+
+class _InterestChoiceChip extends StatelessWidget {
+  const _InterestChoiceChip({
+    required this.label,
+    required this.selected,
+    required this.onSelected,
+  });
+
+  final String label;
+  final bool selected;
+  final ValueChanged<bool> onSelected;
+
+  @override
+  Widget build(BuildContext context) => FilterChip(
+    label: Text(label),
+    selected: selected,
+    showCheckmark: false,
+    selectedColor: const Color(0xFFF4E3DB),
+    backgroundColor: AppColors.surfaceVariantLight,
+    side: BorderSide.none,
+    shape: const StadiumBorder(),
+    pressElevation: 0,
+    labelStyle: TextStyle(
+      color: selected ? AppColors.primaryDark : AppColors.textPrimaryLight,
+      fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+    ),
+    onSelected: onSelected,
+  );
 }

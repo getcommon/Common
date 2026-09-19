@@ -82,117 +82,96 @@ class _SearchRadiusSettingsState extends State<SearchRadiusSettings> {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
           children: [
-            Row(
-              children: [
-                Icon(Icons.radar, color: colorScheme.primary, size: 20),
-                const SizedBox(width: 8),
-                Text(
-                  'Discovery radius',
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 4),
+            Icon(Icons.radar, color: colorScheme.primary, size: 19),
+            const SizedBox(width: 8),
             Text(
-              'Only people within this nearby range can appear in Discover.',
+              'Your nearby range',
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const Spacer(),
+            Text(
+              'Under 0.5 mi',
+              style: theme.textTheme.titleSmall?.copyWith(
+                color: colorScheme.primary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Only people within this nearby range can appear in Discover.',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          _getRadiusDescription(_currentRadius),
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: 4),
+
+        SliderTheme(
+          data: SliderTheme.of(context).copyWith(
+            activeTrackColor: colorScheme.primary,
+            inactiveTrackColor: colorScheme.primary.withValues(alpha: 0.3),
+            thumbColor: colorScheme.primary,
+            overlayColor: colorScheme.primary.withValues(alpha: 0.2),
+            valueIndicatorColor: colorScheme.primary,
+            valueIndicatorTextStyle: TextStyle(
+              color: colorScheme.onPrimary,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          child: Slider(
+            value: _currentRadius,
+            min: kMinSearchRadiusKm,
+            max: kMaxSearchRadiusKm,
+            divisions: 4,
+            label: 'Nearby',
+            onChanged: _isSaving
+                ? null
+                : (value) {
+                    HapticFeedback.selectionClick();
+                    setState(() => _currentRadius = value);
+                  },
+            onChangeEnd: _saveRadius,
+          ),
+        ),
+
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'Very close',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
             ),
-            const SizedBox(height: 16),
-
-            // Current radius display
-            Center(
-              child: Column(
-                children: [
-                  Text(
-                    'Under 0.5 mi',
-                    style: theme.textTheme.headlineMedium?.copyWith(
-                      color: colorScheme.primary,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    _getRadiusDescription(_currentRadius),
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ],
+            Text(
+              'Under 0.5 mi',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
               ),
             ),
-            const SizedBox(height: 16),
-
-            // Slider
-            SliderTheme(
-              data: SliderTheme.of(context).copyWith(
-                activeTrackColor: colorScheme.primary,
-                inactiveTrackColor: colorScheme.primary.withValues(alpha: 0.3),
-                thumbColor: colorScheme.primary,
-                overlayColor: colorScheme.primary.withValues(alpha: 0.2),
-                valueIndicatorColor: colorScheme.primary,
-                valueIndicatorTextStyle: TextStyle(
-                  color: colorScheme.onPrimary,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              child: Slider(
-                value: _currentRadius,
-                min: kMinSearchRadiusKm,
-                max: kMaxSearchRadiusKm,
-                divisions: 4,
-                label: 'Nearby',
-                onChanged: _isSaving
-                    ? null
-                    : (value) {
-                        // Haptic feedback for better UX
-                        HapticFeedback.selectionClick();
-                        setState(() {
-                          _currentRadius = value;
-                        });
-                      },
-                onChangeEnd: (value) {
-                  // Save when user releases slider
-                  _saveRadius(value);
-                },
-              ),
-            ),
-
-            // Min/Max labels
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'Very close',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-                Text(
-                  'Under 0.5 mi',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
-            ),
-
-            if (_isSaving) ...[
-              const SizedBox(height: 12),
-              const LinearProgressIndicator(),
-            ],
           ],
         ),
-      ),
+
+        if (_isSaving) ...[
+          const SizedBox(height: 12),
+          const LinearProgressIndicator(),
+        ],
+      ],
     );
   }
 

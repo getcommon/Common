@@ -29,6 +29,10 @@ class SafetyService {
     'unmatchedUserIds': FieldValue.arrayUnion([otherUserId]),
   });
 
+  Future<void> unblock(String userId, String otherUserId) => _update(userId, {
+    'blockedUserIds': FieldValue.arrayRemove([otherUserId]),
+  });
+
   Future<void> report({
     required String reporterId,
     required String subjectId,
