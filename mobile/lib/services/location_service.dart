@@ -5,6 +5,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:geoflutterfire_plus/geoflutterfire_plus.dart';
 import 'package:mobile/services/proximity_service.dart';
+import 'package:mobile/constants/proximity_constants.dart';
 
 class LocationService {
   LocationService._();
@@ -21,6 +22,9 @@ class LocationService {
 
   // Update interval in minutes (coarse tracking for privacy)
   static const _updateIntervalMinutes = 5;
+
+  Timestamp _presenceExpiry() =>
+      Timestamp.fromDate(DateTime.now().add(kPresenceLifetime));
 
   // Geohash precision (lower = coarser area, better privacy)
   // Precision 6 = ~1.2km x 0.6km area
@@ -291,6 +295,7 @@ class LocationService {
           'latitude': position.latitude,
           'longitude': position.longitude,
           'lastUpdated': FieldValue.serverTimestamp(),
+          'expiresAt': _presenceExpiry(),
           'isVisible': true, // User can toggle this in settings
         },
       }, SetOptions(merge: true));
@@ -344,6 +349,7 @@ class LocationService {
         'location': {
           'isVisible': false,
           'lastUpdated': FieldValue.serverTimestamp(),
+          'expiresAt': FieldValue.serverTimestamp(),
         },
       }, SetOptions(merge: true));
       stopTracking();
@@ -356,6 +362,7 @@ class LocationService {
       'location': {
         'isVisible': true,
         'lastUpdated': FieldValue.serverTimestamp(),
+        'expiresAt': _presenceExpiry(),
       },
     }, SetOptions(merge: true));
     return true;
@@ -448,6 +455,7 @@ class LocationService {
           'latitude': position.latitude,
           'longitude': position.longitude,
           'lastUpdated': FieldValue.serverTimestamp(),
+          'expiresAt': _presenceExpiry(),
           'isVisible': true,
         },
       }, SetOptions(merge: true));

@@ -202,7 +202,9 @@ class _ProfileSetupPageState extends State<ProfileSetupPage> {
         vibeTags: _vibeTags.toList(),
         createdAt: widget.profile.createdAt,
         updatedAt: DateTime.now(),
-        location: widget.profile.location,
+        // Location is updated only by LocationService so its server timestamp
+        // and short presence expiry cannot be overwritten by profile edits.
+        location: null,
         searchRadiusKm: widget.profile.searchRadiusKm,
         hasCompletedDiscoverySetup: widget.profile.hasCompletedDiscoverySetup,
       );

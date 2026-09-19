@@ -157,6 +157,7 @@ class UserLocation {
   final double? latitude;
   final double? longitude;
   final DateTime? lastUpdated;
+  final DateTime? expiresAt;
   final bool isVisible;
 
   const UserLocation({
@@ -164,6 +165,7 @@ class UserLocation {
     this.latitude,
     this.longitude,
     this.lastUpdated,
+    this.expiresAt,
     this.isVisible = true,
   });
 
@@ -172,6 +174,7 @@ class UserLocation {
     if (latitude != null) 'latitude': latitude,
     if (longitude != null) 'longitude': longitude,
     if (lastUpdated != null) 'lastUpdated': lastUpdated!.millisecondsSinceEpoch,
+    if (expiresAt != null) 'expiresAt': expiresAt!.millisecondsSinceEpoch,
     'isVisible': isVisible,
   };
 
@@ -193,11 +196,22 @@ class UserLocation {
       }
     }
 
+    DateTime? expiresAt;
+    if (m['expiresAt'] != null) {
+      final expiresAtValue = m['expiresAt'];
+      if (expiresAtValue is Timestamp) {
+        expiresAt = expiresAtValue.toDate();
+      } else if (expiresAtValue is int) {
+        expiresAt = DateTime.fromMillisecondsSinceEpoch(expiresAtValue);
+      }
+    }
+
     return UserLocation(
       geohash: geohash,
       latitude: m['latitude'] as double?,
       longitude: m['longitude'] as double?,
       lastUpdated: lastUpdated,
+      expiresAt: expiresAt,
       isVisible: m['isVisible'] as bool? ?? true,
     );
   }

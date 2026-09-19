@@ -99,7 +99,7 @@ mobile/
 ## Next work
 
 1. Bundle and apply the selected editorial typography system consistently across the app (the recommended cross-platform choice is DM Sans; it is not installed yet).
-2. Add server-side presence freshness/expiry enforcement and test permission denial, enabling, backgrounding, and return behavior.
+2. Test location permission denial, enabling, backgrounding, and returning on physical devices; presence now expires server-side after ten minutes without a refresh.
 3. Add emulator tests for daily-wave races/bypass attempts and matching thresholds.
 4. Complete the dark-mode pass for the redesigned screens.
 5. Exercise the full flow using two real nearby test accounts: Discover → wave → mutual → Activity → Inbox.

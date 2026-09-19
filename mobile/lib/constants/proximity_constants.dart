@@ -23,6 +23,10 @@ const int kDefaultResultLimit = 10;
 /// Cache expiry duration for proximity matches
 const Duration kMatchCacheExpiry = Duration(minutes: 5);
 
+/// Discoverability must be refreshed while Common is in the foreground.
+/// The backend independently enforces this same ten-minute window.
+const Duration kPresenceLifetime = Duration(minutes: 10);
+
 /// Helper to clamp radius within valid bounds
 double clampSearchRadius(double radius) {
   return radius.clamp(kMinSearchRadiusKm, kMaxSearchRadiusKm);

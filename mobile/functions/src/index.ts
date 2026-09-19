@@ -2,6 +2,7 @@ import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { onDocumentCreated, onDocumentUpdated } from 'firebase-functions/v2/firestore';
 import { setGlobalOptions } from 'firebase-functions/v2';
 import * as admin from 'firebase-admin';
+import { hasFreshPresence } from './presence';
 
 // Initialize Firebase Admin
 admin.initializeApp();
@@ -17,6 +18,7 @@ interface UserLocation {
   latitude: number;
   longitude: number;
   lastUpdated: admin.firestore.Timestamp;
+  expiresAt: admin.firestore.Timestamp;
   isVisible: boolean;
 }
 
@@ -344,7 +346,7 @@ export const findNearbyMatches = onCall(
       const currentUserProfile = currentUserDoc.data() as UserProfile;
       
       // Validate user has location and interests
-      if (!currentUserProfile.location?.isVisible) {
+      if (!hasFreshPresence(currentUserProfile.location)) {
         return {
           matches: [],
           totalProcessed: 0,
@@ -404,6 +406,12 @@ export const findNearbyMatches = onCall(
 
         try {
           const userProfile = doc.data() as UserProfile;
+
+          // A visible flag is not enough: matching must stop when the member's
+          // foreground presence has not been refreshed in time.
+          if (!hasFreshPresence(userProfile.location)) {
+            continue;
+          }
 
           // Check if user has location coordinates
           if (!userProfile.location?.latitude || !userProfile.location?.longitude) {
@@ -508,6 +516,12 @@ export const getUserProfile = onCall(
     }
 
     const { uid } = data;
+    if (uid !== context.uid) {
+      throw new HttpsError(
+        'permission-denied',
+        'Profiles are available only through privacy-safe discovery results.',
+      );
+    }
     const db = admin.firestore();
     
     try {

@@ -47,7 +47,8 @@ class _SearchRadiusSettingsState extends State<SearchRadiusSettings> {
         vibeTags: widget.profile.vibeTags,
         createdAt: widget.profile.createdAt,
         updatedAt: DateTime.now(),
-        location: widget.profile.location,
+        // Keep location writes in LocationService, where presence is bounded.
+        location: null,
         searchRadiusKm: newRadius,
         hasCompletedDiscoverySetup: widget.profile.hasCompletedDiscoverySetup,
       );

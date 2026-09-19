@@ -18,6 +18,8 @@ Last updated: 2026-09-19
 - **Functions runtime:** Firebase Functions now use Node.js 22 and `firebase-functions` 7.4.x. The current functions deployment completed successfully.
 - **Radius:** Version-one discovery is capped at the brief’s preferred `under 0.5 mi` range (`0.8 km` internally).
 - **Discoverability onboarding:** After a new member completes their profile, Common presents an explicit nearby-discovery choice. Location permission is requested only when they choose to enable it; “Not now” keeps discovery paused, and permanent denial has a device-settings recovery path.
+- **Presence expiry:** Location updates now carry a ten-minute expiry and are refreshed every five minutes while Common is active. `findNearbyMatches` requires the caller and every candidate to be visible, unexpired, and recently refreshed on the server.
+- **Location boundary:** Firestore rules require location freshness writes to use the request’s server timestamp and cap an active presence at ten minutes. The raw profile callable is now self-only; public discovery uses its minimal derived profile response.
 
 ## Important implementation notes
 
@@ -47,7 +49,7 @@ The analyzer and each focused suite passed after the corresponding changes.
 ## Suggested next steps
 
 1. Bundle and apply the editorial typography system consistently across the app (DM Sans is the current recommendation).
-2. Add server-side freshness/expiry enforcement for presence, then test permission denial, enabling, backgrounding, and returning to the app.
+2. Test permission denial, enabling, backgrounding, and returning to the app on physical devices; tune the ten-minute presence window if needed.
 3. Add emulator coverage for daily wave races and matching thresholds.
 4. Complete a dark-mode styling pass across Discover, Activity, Inbox, conversation detail, Profile, Settings, and Edit Profile.
 5. Exercise the entire flow with two real nearby test accounts, then remove or migrate remaining legacy student/campus language in older onboarding or unused paths.

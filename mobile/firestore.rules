@@ -13,13 +13,35 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == userId;
     }
 
+    // A client may choose to be discoverable, but cannot extend that presence
+    // indefinitely with a forged timestamp. Server timestamp transforms
+    // resolve to request.time in rules.
+    function hasValidPresenceUpdate() {
+      return !request.resource.data.diff(resource.data).affectedKeys()
+          .hasAny(['location']) ||
+        (
+          request.resource.data.location.lastUpdated == request.time &&
+          (
+            (!request.resource.data.location.isVisible &&
+              request.resource.data.location.expiresAt <= request.time) ||
+            (request.resource.data.location.isVisible &&
+              request.resource.data.location.expiresAt > request.time &&
+              request.resource.data.location.expiresAt <=
+                request.time + duration.value(10, 'm'))
+          )
+        );
+    }
+
     // Users collection
     match /users/{userId} {
       // A member's full profile, including private location state, is private.
       allow read: if isOwner(userId);
 
-      // Users can only write their own profile
-      allow write: if isOwner(userId);
+      // Owners can update their profile, while presence timestamps remain
+      // bounded and server-authenticated for matching.
+      allow create: if isOwner(userId);
+      allow update: if isOwner(userId) && hasValidPresenceUpdate();
+      allow delete: if isOwner(userId);
     }
 
     // Waves collection
