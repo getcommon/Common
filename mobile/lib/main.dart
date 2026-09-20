@@ -15,6 +15,7 @@ import 'pages/discoverability_setup_page.dart';
 import 'services/messaging_service.dart';
 import 'services/location_service.dart';
 import 'services/local_prefs.dart';
+import 'services/auth_service.dart';
 
 // Design system imports
 import 'core/theme/app_theme.dart';
@@ -84,6 +85,7 @@ class BootstrapGate extends StatefulWidget {
 class _BootstrapGateState extends State<BootstrapGate>
     with WidgetsBindingObserver {
   String? _activeUserId;
+  bool _hasAuthenticatedThisSession = false;
 
   @override
   void initState() {
@@ -135,135 +137,153 @@ class _BootstrapGateState extends State<BootstrapGate>
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<User?>(
-      stream: FirebaseAuth.instance.authStateChanges(),
-      builder: (context, authSnap) {
-        debugPrint(
-          '🔍 BootstrapGate: Auth connection state = ${authSnap.connectionState}',
-        );
-
-        if (authSnap.connectionState == ConnectionState.waiting) {
-          debugPrint('🔍 BootstrapGate: Waiting for auth...');
+    return ValueListenableBuilder<bool>(
+      valueListenable: AuthService.instance.isSigningOut,
+      builder: (context, signingOut, child) {
+        if (signingOut) {
           return const Scaffold(
             body: Center(child: CircularProgressIndicator()),
           );
         }
-        if (authSnap.hasError) {
-          debugPrint('🔍 BootstrapGate: Auth error = ${authSnap.error}');
-          return Scaffold(
-            body: Center(child: Text('Auth error: ${authSnap.error}')),
-          );
-        }
-
-        final user = authSnap.data;
-        debugPrint('🔍 BootstrapGate: User = ${user?.uid ?? "null"}');
-        if (user == null) {
-          _activeUserId = null;
-          return FutureBuilder<bool>(
-            future: LocalPrefs.hasOnboarded(),
-            builder: (context, onboardingSnap) {
-              if (onboardingSnap.connectionState != ConnectionState.done) {
-                return const Scaffold(
-                  body: Center(child: CircularProgressIndicator()),
-                );
-              }
-              return onboardingSnap.data == true
-                  ? const WelcomePage()
-                  : const OnboardingPage();
-            },
-          );
-        }
-
-        // Ensure there's a profile doc, then watch it.
-        debugPrint(
-          '🔍 BootstrapGate: Initializing user services for ${user.uid}...',
-        );
-        return FutureBuilder<void>(
-          future: _initUserServices(user.uid),
-          builder: (context, initSnap) {
+        return StreamBuilder<User?>(
+          stream: FirebaseAuth.instance.authStateChanges(),
+          builder: (context, authSnap) {
             debugPrint(
-              '🔍 BootstrapGate: Service init state = ${initSnap.connectionState}',
+              '🔍 BootstrapGate: Auth connection state = ${authSnap.connectionState}',
             );
 
-            if (initSnap.connectionState != ConnectionState.done) {
-              debugPrint(
-                '🔍 BootstrapGate: Waiting for services to initialize...',
-              );
+            if (authSnap.connectionState == ConnectionState.waiting) {
+              debugPrint('🔍 BootstrapGate: Waiting for auth...');
               return const Scaffold(
                 body: Center(child: CircularProgressIndicator()),
               );
             }
-            // If init fails, don't block the app—just continue
-            // (you can show a snackbar/toast elsewhere if desired)
-            if (initSnap.hasError) {
-              debugPrint(
-                '🔍 BootstrapGate: Service init error = ${initSnap.error}',
-              );
+            if (authSnap.hasError) {
+              debugPrint('🔍 BootstrapGate: Auth error = ${authSnap.error}');
               return Scaffold(
-                body: Center(
-                  child: Text('Service init error: ${initSnap.error}'),
-                ),
+                body: Center(child: Text('Auth error: ${authSnap.error}')),
               );
             }
 
+            final user = authSnap.data;
+            debugPrint('🔍 BootstrapGate: User = ${user?.uid ?? "null"}');
+            if (user == null) {
+              _activeUserId = null;
+              // Onboarding is only for a genuinely new launch. Once someone
+              // has had an authenticated session, signing out should always
+              // return them to the login screen.
+              if (_hasAuthenticatedThisSession) {
+                return const WelcomePage();
+              }
+              return FutureBuilder<bool>(
+                future: LocalPrefs.hasOnboarded(),
+                builder: (context, onboardingSnap) {
+                  if (onboardingSnap.connectionState != ConnectionState.done) {
+                    return const Scaffold(
+                      body: Center(child: CircularProgressIndicator()),
+                    );
+                  }
+                  return onboardingSnap.data == true
+                      ? const WelcomePage()
+                      : const OnboardingPage();
+                },
+              );
+            }
+
+            _hasAuthenticatedThisSession = true;
+
+            // Ensure there's a profile doc, then watch it.
             debugPrint(
-              '🔍 BootstrapGate: Services initialized, watching profile...',
+              '🔍 BootstrapGate: Initializing user services for ${user.uid}...',
             );
-            return StreamBuilder<UserProfile?>(
-              stream: ProfileService.instance.watchProfile(user.uid),
-              builder: (context, profSnap) {
+            return FutureBuilder<void>(
+              future: _initUserServices(user.uid),
+              builder: (context, initSnap) {
                 debugPrint(
-                  '🔍 BootstrapGate: Profile connection state = ${profSnap.connectionState}',
+                  '🔍 BootstrapGate: Service init state = ${initSnap.connectionState}',
                 );
 
-                if (profSnap.connectionState == ConnectionState.waiting) {
-                  debugPrint('🔍 BootstrapGate: Waiting for profile...');
+                if (initSnap.connectionState != ConnectionState.done) {
+                  debugPrint(
+                    '🔍 BootstrapGate: Waiting for services to initialize...',
+                  );
                   return const Scaffold(
                     body: Center(child: CircularProgressIndicator()),
                   );
                 }
-                if (profSnap.hasError) {
+                // If init fails, don't block the app—just continue
+                // (you can show a snackbar/toast elsewhere if desired)
+                if (initSnap.hasError) {
                   debugPrint(
-                    '🔍 BootstrapGate: Profile error = ${profSnap.error}',
+                    '🔍 BootstrapGate: Service init error = ${initSnap.error}',
                   );
                   return Scaffold(
                     body: Center(
-                      child: Text('Profile load error: ${profSnap.error}'),
+                      child: Text('Service init error: ${initSnap.error}'),
                     ),
                   );
                 }
-                final profile = profSnap.data;
-                debugPrint(
-                  '🔍 BootstrapGate: Profile = ${profile?.uid}, isComplete = ${profile?.isComplete}',
-                );
 
-                if (profile == null || !profile.isComplete) {
-                  debugPrint(
-                    '🔍 BootstrapGate: Profile incomplete, showing ProfileSetupPage',
-                  );
-                  return ProfileSetupPage(
-                    profile:
-                        profile ??
-                        UserProfile(
-                          uid: user.uid,
-                          displayName: user.displayName,
-                          photoUrl: user.photoURL,
-                          bio: null,
-                          classYear: null,
-                          major: null,
-                          interests: const [],
-                          createdAt: DateTime.now(),
-                          updatedAt: DateTime.now(),
-                        ),
-                  );
-                }
-                if (!profile.hasCompletedDiscoverySetup) {
-                  return DiscoverabilitySetupPage(profile: profile);
-                }
                 debugPrint(
-                  '🔍 BootstrapGate: Profile complete, showing AppShell',
+                  '🔍 BootstrapGate: Services initialized, watching profile...',
                 );
-                return const AppShell();
+                return StreamBuilder<UserProfile?>(
+                  stream: ProfileService.instance.watchProfile(user.uid),
+                  builder: (context, profSnap) {
+                    debugPrint(
+                      '🔍 BootstrapGate: Profile connection state = ${profSnap.connectionState}',
+                    );
+
+                    if (profSnap.connectionState == ConnectionState.waiting) {
+                      debugPrint('🔍 BootstrapGate: Waiting for profile...');
+                      return const Scaffold(
+                        body: Center(child: CircularProgressIndicator()),
+                      );
+                    }
+                    if (profSnap.hasError) {
+                      debugPrint(
+                        '🔍 BootstrapGate: Profile error = ${profSnap.error}',
+                      );
+                      return Scaffold(
+                        body: Center(
+                          child: Text('Profile load error: ${profSnap.error}'),
+                        ),
+                      );
+                    }
+                    final profile = profSnap.data;
+                    debugPrint(
+                      '🔍 BootstrapGate: Profile = ${profile?.uid}, isComplete = ${profile?.isComplete}',
+                    );
+
+                    if (profile == null || !profile.isComplete) {
+                      debugPrint(
+                        '🔍 BootstrapGate: Profile incomplete, showing ProfileSetupPage',
+                      );
+                      return ProfileSetupPage(
+                        profile:
+                            profile ??
+                            UserProfile(
+                              uid: user.uid,
+                              displayName: user.displayName,
+                              photoUrl: user.photoURL,
+                              bio: null,
+                              classYear: null,
+                              major: null,
+                              interests: const [],
+                              createdAt: DateTime.now(),
+                              updatedAt: DateTime.now(),
+                            ),
+                      );
+                    }
+                    if (!profile.hasCompletedDiscoverySetup) {
+                      return DiscoverabilitySetupPage(profile: profile);
+                    }
+                    debugPrint(
+                      '🔍 BootstrapGate: Profile complete, showing AppShell',
+                    );
+                    return const AppShell();
+                  },
+                );
               },
             );
           },

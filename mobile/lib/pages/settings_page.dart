@@ -93,6 +93,7 @@ class SettingsPage extends StatelessWidget {
   );
 
   Future<void> _confirmSignOut(BuildContext context) async {
+    final navigator = Navigator.of(context);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -110,7 +111,12 @@ class SettingsPage extends StatelessWidget {
         ],
       ),
     );
-    if (confirmed == true) await AuthService.instance.signOut();
+    if (confirmed == true) {
+      // Settings is pushed above AppShell. Remove it before the auth gate
+      // replaces the shell, otherwise this route stays visible over login.
+      navigator.pop();
+      await AuthService.instance.signOut();
+    }
   }
 }
 

@@ -1,13 +1,15 @@
-import 'package:flutter/material.dart';
 import 'dart:io' show Platform;
-import '../services/auth_service.dart';
-import '../core/theme/app_colors.dart';
-import '../core/theme/app_spacing.dart';
+
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-/// Premium welcome/landing page with high-tech industry design standards.
-/// Matches the quality of Tinder, Bumble, and Instagram.
+import '../core/theme/app_colors.dart';
+import '../services/auth_service.dart';
+
+/// The signed-out front door. Authentication stays here so the bootstrap gate
+/// can continue to react to authStateChanges without navigation work in the UI.
 class WelcomePage extends StatefulWidget {
   const WelcomePage({super.key});
 
@@ -19,37 +21,20 @@ class _WelcomePageState extends State<WelcomePage>
     with SingleTickerProviderStateMixin {
   bool _loading = false;
   String? _error;
-  late AnimationController _animationController;
-  late Animation<double> _fadeAnimation;
-  late Animation<Offset> _slideAnimation;
+  late final AnimationController _entranceController;
 
   @override
   void initState() {
     super.initState();
-    _animationController = AnimationController(
+    _entranceController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 800),
-    );
-
-    _fadeAnimation = CurvedAnimation(
-      parent: _animationController,
-      curve: Curves.easeOut,
-    );
-
-    _slideAnimation =
-        Tween<Offset>(begin: const Offset(0, 0.1), end: Offset.zero).animate(
-          CurvedAnimation(
-            parent: _animationController,
-            curve: Curves.easeOutCubic,
-          ),
-        );
-
-    _animationController.forward();
+      duration: const Duration(milliseconds: 650),
+    )..forward();
   }
 
   @override
   void dispose() {
-    _animationController.dispose();
+    _entranceController.dispose();
     super.dispose();
   }
 
@@ -60,12 +45,10 @@ class _WelcomePageState extends State<WelcomePage>
     });
     try {
       await AuthService.instance.signInWithGoogle();
-      // authStateChanges() in BootstrapGate will handle navigation
-    } catch (e) {
-      debugPrint('Google sign-in failed: $e');
-      if (mounted) {
-        setState(() => _error = 'Google sign-in failed: $e');
-      }
+      // BootstrapGate reacts to authStateChanges and handles the next route.
+    } catch (error) {
+      debugPrint('Google sign-in failed: $error');
+      if (mounted) setState(() => _error = 'Google sign-in failed: $error');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -78,20 +61,20 @@ class _WelcomePageState extends State<WelcomePage>
     });
     try {
       await AuthService.instance.signInWithApple();
-      // authStateChanges() in BootstrapGate will handle navigation
-    } catch (e) {
-      debugPrint('Apple sign-in failed: $e');
-      if (mounted) {
-        setState(() => _error = 'Apple sign-in failed: $e');
-      }
+      // BootstrapGate reacts to authStateChanges and handles the next route.
+    } catch (error) {
+      debugPrint('Apple sign-in failed: $error');
+      if (mounted) setState(() => _error = 'Apple sign-in failed: $error');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
   }
 
   Future<void> _launchUrl(String url) async {
-    final uri = Uri.parse(url);
-    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+    if (!await launchUrl(
+      Uri.parse(url),
+      mode: LaunchMode.externalApplication,
+    )) {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
@@ -103,256 +86,129 @@ class _WelcomePageState extends State<WelcomePage>
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final screenHeight = MediaQuery.of(context).size.height;
-    final screenWidth = MediaQuery.of(context).size.width;
+    final colors = Theme.of(context).colorScheme;
+    final size = MediaQuery.sizeOf(context);
+    final horizontalPadding = size.width >= 700 ? 64.0 : 24.0;
+    final contentWidth = size.width >= 700 ? 500.0 : double.infinity;
+    final supportsAppleSignIn = !kIsWeb && (Platform.isIOS || Platform.isMacOS);
 
     return Scaffold(
-      body: Container(
-        // Premium gradient background
+      body: DecoratedBox(
         decoration: BoxDecoration(
+          color: isDark ? AppColors.backgroundDark : AppColors.backgroundLight,
           gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
             colors: isDark
-                ? [const Color(0xFF1A1A1A), const Color(0xFF0D0D0D)]
-                : [const Color(0xFFFAFAFA), const Color(0xFFFFFFFF)],
+                ? const [Color(0xFF241E1B), AppColors.backgroundDark]
+                : const [Color(0xFFFFFCFA), AppColors.backgroundLight],
           ),
         ),
         child: SafeArea(
-          child: FadeTransition(
-            opacity: _fadeAnimation,
-            child: SlideTransition(
-              position: _slideAnimation,
-              child: Padding(
-                padding: EdgeInsets.symmetric(
-                  horizontal: screenWidth > 600 ? 64 : AppSpacing.xl,
+          child: Center(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: contentWidth),
+              child: FadeTransition(
+                opacity: CurvedAnimation(
+                  parent: _entranceController,
+                  curve: Curves.easeOut,
                 ),
-                child: Column(
-                  children: [
-                    // Top spacer
-                    SizedBox(height: screenHeight * 0.1),
-
-                    // Premium app branding with animation
-                    TweenAnimationBuilder<double>(
-                      tween: Tween(begin: 0.0, end: 1.0),
-                      duration: const Duration(milliseconds: 600),
-                      curve: Curves.elasticOut,
-                      builder: (context, value, child) {
-                        return Transform.scale(scale: value, child: child);
-                      },
-                      child: Container(
-                        width: 120,
-                        height: 120,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          gradient: const LinearGradient(
-                            colors: [AppColors.primary, Color(0xFF4CD694)],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
+                child: SlideTransition(
+                  position:
+                      Tween<Offset>(
+                        begin: const Offset(0, .035),
+                        end: Offset.zero,
+                      ).animate(
+                        CurvedAnimation(
+                          parent: _entranceController,
+                          curve: Curves.easeOutCubic,
+                        ),
+                      ),
+                  child: SingleChildScrollView(
+                    padding: EdgeInsets.fromLTRB(
+                      horizontalPadding,
+                      16,
+                      horizontalPadding,
+                      28,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const _Wordmark(),
+                        SizedBox(height: size.height < 700 ? 28 : 48),
+                        const _EditorialPortrait(),
+                        const SizedBox(height: 26),
+                        Text(
+                          'A little more\n+common ground.',
+                          style: Theme.of(context).textTheme.displaySmall
+                              ?.copyWith(
+                                color: colors.onSurface,
+                                fontSize: 37,
+                                height: 1.08,
+                                letterSpacing: -1.35,
+                                fontWeight: FontWeight.w600,
+                              ),
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          'Meet people nearby who share the things that make a day feel more like yours.',
+                          style: Theme.of(context).textTheme.bodyLarge
+                              ?.copyWith(
+                                color: isDark
+                                    ? AppColors.textSecondaryDark
+                                    : AppColors.textSecondaryLight,
+                                height: 1.45,
+                                letterSpacing: .1,
+                              ),
+                        ),
+                        SizedBox(height: size.height < 700 ? 26 : 36),
+                        if (_error != null) ...[
+                          _SignInError(message: _error!),
+                          const SizedBox(height: 14),
+                        ],
+                        _AuthButton(
+                          onPressed: _loading ? null : _handleGoogleSignIn,
+                          loading: _loading,
+                          icon: const FaIcon(FontAwesomeIcons.google, size: 18),
+                          label: 'Continue with Google',
+                          backgroundColor: isDark
+                              ? AppColors.surfaceDark
+                              : AppColors.surfaceLight,
+                          foregroundColor: colors.onSurface,
+                          borderColor: isDark
+                              ? AppColors.borderDark
+                              : AppColors.borderLight,
+                        ),
+                        if (supportsAppleSignIn) ...[
+                          const SizedBox(height: 12),
+                          _AuthButton(
+                            onPressed: _loading ? null : _handleAppleSignIn,
+                            loading: _loading,
+                            icon: const FaIcon(
+                              FontAwesomeIcons.apple,
+                              size: 20,
+                            ),
+                            label: 'Continue with Apple',
+                            backgroundColor: isDark
+                                ? AppColors.textPrimaryDark
+                                : const Color(0xFF241E1C),
+                            foregroundColor: isDark
+                                ? AppColors.backgroundDark
+                                : Colors.white,
+                            borderColor: Colors.transparent,
                           ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: AppColors.primary.withValues(alpha: 0.4),
-                              blurRadius: 32,
-                              offset: const Offset(0, 12),
-                              spreadRadius: 4,
-                            ),
-                          ],
+                        ],
+                        const SizedBox(height: 20),
+                        _TermsAndPrivacy(
+                          isDark: isDark,
+                          onTermsTap: () =>
+                              _launchUrl('https://commongrounds.app/terms'),
+                          onPrivacyTap: () =>
+                              _launchUrl('https://commongrounds.app/privacy'),
                         ),
-                        child: const Center(
-                          child: Text(
-                            '🌱',
-                            style: TextStyle(fontSize: 64, height: 1),
-                          ),
-                        ),
-                      ),
+                      ],
                     ),
-
-                    const SizedBox(height: 40),
-
-                    // App name with letter spacing
-                    ShaderMask(
-                      shaderCallback: (bounds) => const LinearGradient(
-                        colors: [AppColors.primary, Color(0xFF4CD694)],
-                      ).createShader(bounds),
-                      child: Text(
-                        'Common Grounds',
-                        style: TextStyle(
-                          fontSize: 38,
-                          fontWeight: FontWeight.w800,
-                          height: 1.1,
-                          color: Colors.white,
-                          letterSpacing: -1,
-                        ),
-                      ),
-                    ),
-
-                    const SizedBox(height: 12),
-
-                    // Tagline with better typography
-                    Text(
-                      'Find your people on campus',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 17,
-                        height: 1.5,
-                        color: isDark
-                            ? AppColors.textSecondaryDark.withValues(alpha: 0.9)
-                            : AppColors.textSecondaryLight.withValues(
-                                alpha: 0.9,
-                              ),
-                        fontWeight: FontWeight.w400,
-                        letterSpacing: 0.2,
-                      ),
-                    ),
-
-                    const Spacer(),
-
-                    // Error message with better design
-                    if (_error != null)
-                      AnimatedContainer(
-                        duration: const Duration(milliseconds: 300),
-                        margin: const EdgeInsets.only(bottom: 20),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 14,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.red.withValues(alpha: 0.08),
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(
-                            color: Colors.red.withValues(alpha: 0.2),
-                            width: 1.5,
-                          ),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.error_outline_rounded,
-                              color: Colors.red.shade700,
-                              size: 22,
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Text(
-                                _error!,
-                                style: TextStyle(
-                                  color: Colors.red.shade700,
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-
-                    // Premium Google Sign-In Button
-                    _PremiumAuthButton(
-                      onPressed: _loading ? null : _handleGoogleSignIn,
-                      loading: _loading,
-                      icon: FaIcon(
-                        FontAwesomeIcons.google,
-                        size: 20,
-                        color: Colors.black87,
-                      ),
-                      label: 'Continue with Google',
-                      backgroundColor: Colors.white,
-                      foregroundColor: Colors.black87,
-                      borderColor: isDark
-                          ? Colors.grey.shade600
-                          : Colors.grey.shade400,
-                      elevation: 3,
-                    ),
-
-                    // OR divider (Premium style)
-                    if (Platform.isIOS || Platform.isMacOS)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 20),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Container(
-                                height: 1,
-                                decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    colors: [
-                                      Colors.transparent,
-                                      isDark
-                                          ? Colors.white.withValues(alpha: 0.1)
-                                          : Colors.black.withValues(alpha: 0.1),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                            Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                              ),
-                              child: Text(
-                                'OR',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                  color: isDark
-                                      ? Colors.white.withValues(alpha: 0.4)
-                                      : Colors.black.withValues(alpha: 0.4),
-                                  letterSpacing: 1.2,
-                                ),
-                              ),
-                            ),
-                            Expanded(
-                              child: Container(
-                                height: 1,
-                                decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    colors: [
-                                      isDark
-                                          ? Colors.white.withValues(alpha: 0.1)
-                                          : Colors.black.withValues(alpha: 0.1),
-                                      Colors.transparent,
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-
-                    // Premium Apple Sign-In Button (iOS only)
-                    if (Platform.isIOS || Platform.isMacOS)
-                      _PremiumAuthButton(
-                        onPressed: _loading ? null : _handleAppleSignIn,
-                        loading: _loading,
-                        icon: FaIcon(
-                          FontAwesomeIcons.apple,
-                          size: 22,
-                          color: Colors.white,
-                        ),
-                        label: 'Sign in with Apple',
-                        backgroundColor: isDark ? Colors.white : Colors.black,
-                        foregroundColor: isDark ? Colors.black : Colors.white,
-                        borderColor: isDark
-                            ? Colors.grey.shade300
-                            : Colors.grey.shade800,
-                        elevation: 3,
-                      ),
-
-                    SizedBox(height: screenHeight * 0.04),
-
-                    // Premium Terms and Privacy (Clickable)
-                    _TermsAndPrivacy(
-                      isDark: isDark,
-                      onTermsTap: () =>
-                          _launchUrl('https://commongrounds.app/terms'),
-                      onPrivacyTap: () =>
-                          _launchUrl('https://commongrounds.app/privacy'),
-                    ),
-
-                    SizedBox(height: screenHeight * 0.06),
-                  ],
+                  ),
                 ),
               ),
             ),
@@ -363,18 +219,141 @@ class _WelcomePageState extends State<WelcomePage>
   }
 }
 
-/// Premium authentication button with industry-standard design
-class _PremiumAuthButton extends StatefulWidget {
-  final VoidCallback? onPressed;
-  final bool loading;
-  final Widget icon;
-  final String label;
-  final Color backgroundColor;
-  final Color foregroundColor;
-  final Color borderColor;
-  final double elevation;
+class _Wordmark extends StatelessWidget {
+  const _Wordmark();
 
-  const _PremiumAuthButton({
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Row(
+      children: [
+        Container(
+          width: 30,
+          height: 30,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: AppColors.primary,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: const Text(
+            'C',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 17,
+              fontWeight: FontWeight.w700,
+              height: 1,
+            ),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Text(
+          'Common',
+          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+            color: isDark
+                ? AppColors.textPrimaryDark
+                : AppColors.textPrimaryLight,
+            fontSize: 21,
+            fontWeight: FontWeight.w600,
+            letterSpacing: -.45,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _EditorialPortrait extends StatelessWidget {
+  const _EditorialPortrait();
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(26),
+      child: AspectRatio(
+        aspectRatio: 1.25,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            Image.asset(
+              'assets/images/eren_editorial_portrait.png',
+              fit: BoxFit.cover,
+            ),
+            const DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Color(0x00000000), Color(0x800D0908)],
+                  stops: [.38, 1],
+                ),
+              ),
+            ),
+            Positioned(
+              left: 16,
+              right: 16,
+              bottom: 15,
+              child: Row(
+                children: [
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFCFD69F),
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'Real people, meaningful overlap',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SignInError extends StatelessWidget {
+  const _SignInError({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.error.withValues(alpha: .09),
+        border: Border.all(color: AppColors.error.withValues(alpha: .25)),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.error_outline_rounded,
+            color: AppColors.error,
+            size: 20,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(message, style: Theme.of(context).textTheme.bodySmall),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AuthButton extends StatelessWidget {
+  const _AuthButton({
     required this.onPressed,
     required this.loading,
     required this.icon,
@@ -382,140 +361,125 @@ class _PremiumAuthButton extends StatefulWidget {
     required this.backgroundColor,
     required this.foregroundColor,
     required this.borderColor,
-    this.elevation = 0,
   });
 
-  @override
-  State<_PremiumAuthButton> createState() => _PremiumAuthButtonState();
-}
-
-class _PremiumAuthButtonState extends State<_PremiumAuthButton> {
-  bool _isPressed = false;
+  final VoidCallback? onPressed;
+  final bool loading;
+  final Widget icon;
+  final String label;
+  final Color backgroundColor;
+  final Color foregroundColor;
+  final Color borderColor;
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTapDown: (_) => setState(() => _isPressed = true),
-      onTapUp: (_) => setState(() => _isPressed = false),
-      onTapCancel: () => setState(() => _isPressed = false),
-      child: AnimatedScale(
-        duration: const Duration(milliseconds: 150),
-        curve: Curves.easeOut,
-        scale: _isPressed ? 0.98 : 1.0,
-        child: FilledButton(
-          onPressed: widget.onPressed,
-          style: FilledButton.styleFrom(
-            minimumSize: const Size.fromHeight(58),
-            backgroundColor: widget.backgroundColor,
-            foregroundColor: widget.foregroundColor,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-              side: BorderSide(color: widget.borderColor, width: 1.5),
-            ),
-            elevation: widget.elevation,
-            shadowColor: Colors.black.withValues(alpha: 0.15),
-            padding: const EdgeInsets.symmetric(vertical: 16),
+    return SizedBox(
+      width: double.infinity,
+      height: 54,
+      child: FilledButton(
+        onPressed: onPressed,
+        style: FilledButton.styleFrom(
+          backgroundColor: backgroundColor,
+          foregroundColor: foregroundColor,
+          disabledBackgroundColor: backgroundColor,
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(15),
+            side: BorderSide(color: borderColor),
           ),
-          child: widget.loading
-              ? SizedBox(
-                  width: 22,
-                  height: 22,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2.5,
-                    valueColor: AlwaysStoppedAnimation<Color>(
-                      widget.foregroundColor,
+        ),
+        child: loading
+            ? SizedBox.square(
+                dimension: 20,
+                child: CircularProgressIndicator(
+                  color: foregroundColor,
+                  strokeWidth: 2,
+                ),
+              )
+            : Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  IconTheme(
+                    data: IconThemeData(color: foregroundColor),
+                    child: icon,
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    label,
+                    style: TextStyle(
+                      color: foregroundColor,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
-                )
-              : Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    widget.icon,
-                    const SizedBox(width: 14),
-                    Text(
-                      widget.label,
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 0.2,
-                        color: widget.foregroundColor,
-                      ),
-                    ),
-                  ],
-                ),
-        ),
+                ],
+              ),
       ),
     );
   }
 }
 
-/// Premium Terms and Privacy with clickable links
 class _TermsAndPrivacy extends StatelessWidget {
-  final bool isDark;
-  final VoidCallback onTermsTap;
-  final VoidCallback onPrivacyTap;
-
   const _TermsAndPrivacy({
     required this.isDark,
     required this.onTermsTap,
     required this.onPrivacyTap,
   });
 
+  final bool isDark;
+  final VoidCallback onTermsTap;
+  final VoidCallback onPrivacyTap;
+
   @override
   Widget build(BuildContext context) {
-    return Wrap(
-      alignment: WrapAlignment.center,
-      children: [
-        Text(
-          'By continuing, you agree to our ',
-          style: TextStyle(
-            fontSize: 12,
-            color: isDark
-                ? AppColors.textSecondaryDark.withValues(alpha: 0.7)
-                : AppColors.textSecondaryLight.withValues(alpha: 0.7),
-            height: 1.5,
+    final muted = isDark
+        ? AppColors.textSecondaryDark
+        : AppColors.textSecondaryLight;
+    final style = Theme.of(
+      context,
+    ).textTheme.bodySmall?.copyWith(color: muted, height: 1.45);
+    return Text.rich(
+      TextSpan(
+        style: style,
+        children: [
+          const TextSpan(text: 'By continuing, you agree to our '),
+          WidgetSpan(
+            alignment: PlaceholderAlignment.baseline,
+            baseline: TextBaseline.alphabetic,
+            child: _InlineLink(label: 'Terms', onTap: onTermsTap),
           ),
-          textAlign: TextAlign.center,
-        ),
-        GestureDetector(
-          onTap: onTermsTap,
-          child: Text(
-            'Terms of Service',
-            style: TextStyle(
-              fontSize: 12,
-              color: AppColors.primary,
-              fontWeight: FontWeight.w600,
-              decoration: TextDecoration.underline,
-              decorationColor: AppColors.primary.withValues(alpha: 0.4),
-              height: 1.5,
-            ),
+          const TextSpan(text: ' and '),
+          WidgetSpan(
+            alignment: PlaceholderAlignment.baseline,
+            baseline: TextBaseline.alphabetic,
+            child: _InlineLink(label: 'Privacy Policy', onTap: onPrivacyTap),
           ),
+          const TextSpan(text: '.'),
+        ],
+      ),
+      textAlign: TextAlign.center,
+    );
+  }
+}
+
+class _InlineLink extends StatelessWidget {
+  const _InlineLink({required this.label, required this.onTap});
+
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Text(
+        label,
+        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+          color: AppColors.primary,
+          fontWeight: FontWeight.w600,
+          decoration: TextDecoration.underline,
+          decorationColor: AppColors.primary.withValues(alpha: .55),
         ),
-        Text(
-          ' and ',
-          style: TextStyle(
-            fontSize: 12,
-            color: isDark
-                ? AppColors.textSecondaryDark.withValues(alpha: 0.7)
-                : AppColors.textSecondaryLight.withValues(alpha: 0.7),
-            height: 1.5,
-          ),
-        ),
-        GestureDetector(
-          onTap: onPrivacyTap,
-          child: Text(
-            'Privacy Policy',
-            style: TextStyle(
-              fontSize: 12,
-              color: AppColors.primary,
-              fontWeight: FontWeight.w600,
-              decoration: TextDecoration.underline,
-              decorationColor: AppColors.primary.withValues(alpha: 0.4),
-              height: 1.5,
-            ),
-          ),
-        ),
-      ],
+      ),
     );
   }
 }

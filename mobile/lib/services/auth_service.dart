@@ -1,5 +1,8 @@
 // lib/services/auth_service.dart
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart' show WidgetsBinding;
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'dart:math';
@@ -38,6 +41,7 @@ class AuthService {
       '800333772675-fpnvhp5evfrqifff778b5ssvinldunu7.apps.googleusercontent.com';
 
   final _auth = FirebaseAuth.instance;
+  final ValueNotifier<bool> isSigningOut = ValueNotifier(false);
 
   /// OPTIONAL: call once on app start (e.g., in main after Firebase.initializeApp).
   /// If you see a runtime error asking for serverClientId on Android,
@@ -88,6 +92,7 @@ class AuthService {
 
     final user = cred.user;
     if (user == null) throw Exception('Firebase sign-in failed.');
+    await FirebaseFirestore.instance.enableNetwork();
     return AppUser.fromFirebaseUser(user);
   }
 
@@ -119,6 +124,8 @@ class AuthService {
       final user = userCredential.user;
 
       if (user == null) throw Exception('Firebase sign-in failed.');
+
+      await FirebaseFirestore.instance.enableNetwork();
 
       // Update display name if this is a new user and Apple provided name info
       if (userCredential.additionalUserInfo?.isNewUser == true) {
@@ -160,8 +167,23 @@ class AuthService {
   }
 
   Future<void> signOut() async {
-    await _auth.signOut();
-    await GoogleSignIn.instance.signOut();
-    // Note: Sign in with Apple doesn't require explicit sign out
+    if (isSigningOut.value) return;
+
+    // BootstrapGate removes the authenticated shell as soon as this flips.
+    // Waiting one frame lets its Firestore listeners cancel while credentials
+    // are still valid, avoiding permission-denied errors during sign-out.
+    isSigningOut.value = true;
+    try {
+      await WidgetsBinding.instance.endOfFrame;
+      // Halt requests before the Firebase credential disappears. Otherwise an
+      // in-flight listener can be evaluated as signed out before its widget is
+      // disposed and report a spurious permission-denied exception.
+      await FirebaseFirestore.instance.disableNetwork();
+      await _auth.signOut();
+      await GoogleSignIn.instance.signOut();
+      // Note: Sign in with Apple doesn't require explicit sign out.
+    } finally {
+      isSigningOut.value = false;
+    }
   }
 }
