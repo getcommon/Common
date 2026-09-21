@@ -69,11 +69,11 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions ios = FirebaseOptions(
     apiKey: 'AIzaSyCKPOpL6xYmhxukPvuB8sJsqxuWuC61uQg',
-    appId: '1:800333772675:ios:8e4485ed15e40f2de7a8b6',
+    appId: '1:800333772675:ios:d5bf1a795109ca70e7a8b6',
     messagingSenderId: '800333772675',
     projectId: 'blue4-commongrounds',
     storageBucket: 'blue4-commongrounds.firebasestorage.app',
-    iosBundleId: 'com.example.mobile',
+    iosBundleId: 'com.sanjaykarunamoorthy.common',
   );
 
   static const FirebaseOptions windows = FirebaseOptions(

@@ -36,7 +36,7 @@ class AuthService {
   static final instance = AuthService._();
 
   static const _googleIosClientId =
-      '800333772675-skk1odgbh1hlskfq23u9ilj12m2g7r8a.apps.googleusercontent.com';
+      '800333772675-c31gm5goii7mkhm53h0kncaibudoctar.apps.googleusercontent.com';
   static const _googleWebClientId =
       '800333772675-fpnvhp5evfrqifff778b5ssvinldunu7.apps.googleusercontent.com';
 
