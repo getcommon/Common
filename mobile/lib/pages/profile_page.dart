@@ -295,10 +295,27 @@ class _DiscoverabilityToggle extends StatefulWidget {
 
 class _DiscoverabilityToggleState extends State<_DiscoverabilityToggle> {
   bool _saving = false;
+  late bool _visible;
+
+  @override
+  void initState() {
+    super.initState();
+    _visible = widget.profile.location?.isVisible ?? false;
+  }
+
+  @override
+  void didUpdateWidget(covariant _DiscoverabilityToggle oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Keep in sync with a fresh profile snapshot, but do not overwrite an
+    // optimistic toggle while its Firestore update is still in flight.
+    if (!_saving) {
+      _visible = widget.profile.location?.isVisible ?? false;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final visible = widget.profile.location?.isVisible ?? false;
+    final visible = _visible;
     return Column(
       children: [
         Row(
@@ -333,16 +350,32 @@ class _DiscoverabilityToggleState extends State<_DiscoverabilityToggle> {
   }
 
   Future<void> _setVisible(bool visible) async {
-    setState(() => _saving = true);
+    final previousValue = _visible;
+    setState(() {
+      _visible = visible;
+      _saving = true;
+    });
     try {
       final updated = await LocationService.instance.setLocationVisibility(
         widget.profile.uid,
         visible,
       );
       if (!updated && mounted) {
+        setState(() => _visible = previousValue);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Location access is needed to become discoverable.'),
+          ),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _visible = previousValue);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Could not update discoverability. Please try again.',
+            ),
           ),
         );
       }
