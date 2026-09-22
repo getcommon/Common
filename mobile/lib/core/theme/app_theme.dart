@@ -23,6 +23,7 @@ class AppTheme {
       // Core colors
       useMaterial3: true,
       brightness: Brightness.light,
+      fontFamily: AppTypography.fontFamily,
       colorScheme: ColorScheme.light(
         primary: AppColors.primary,
         onPrimary: Colors.white,
@@ -251,6 +252,7 @@ class AppTheme {
       // Core colors
       useMaterial3: true,
       brightness: Brightness.dark,
+      fontFamily: AppTypography.fontFamily,
       colorScheme: ColorScheme.dark(
         primary: AppColors.primary,
         onPrimary: Colors.white,

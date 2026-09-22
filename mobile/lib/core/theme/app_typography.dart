@@ -1,7 +1,11 @@
 /// Design System - Typography
 ///
-/// Defines text styles for the Common Grounds app following Material Design 3 type scale.
-/// Provides consistent, accessible typography across the application.
+/// Defines the warm, editorial type scale used throughout Common Grounds.
+///
+/// DM Sans is bundled with the application (rather than fetched at runtime), so
+/// the hierarchy is stable on every platform and in offline states. The scale
+/// deliberately uses a small number of weights: the content and people remain
+/// the focus, while labels and interface controls stay quietly supportive.
 library;
 
 import 'package:flutter/material.dart';
@@ -12,8 +16,7 @@ class AppTypography {
   AppTypography._(); // Private constructor
 
   /// Base font family
-  static const String fontFamily =
-      'SF Pro Display'; // Falls back to system font
+  static const String fontFamily = 'DMSans';
 
   // ===========================
   // DISPLAY STYLES (Large, bold headlines)
@@ -21,26 +24,26 @@ class AppTypography {
 
   static const TextStyle displayLarge = TextStyle(
     fontFamily: fontFamily,
-    fontSize: 57,
+    fontSize: 52,
     fontWeight: FontWeight.w700,
-    letterSpacing: -0.25,
-    height: 1.12,
+    letterSpacing: -1.5,
+    height: 1.08,
   );
 
   static const TextStyle displayMedium = TextStyle(
     fontFamily: fontFamily,
-    fontSize: 45,
+    fontSize: 42,
     fontWeight: FontWeight.w700,
-    letterSpacing: 0,
-    height: 1.16,
+    letterSpacing: -1.1,
+    height: 1.1,
   );
 
   static const TextStyle displaySmall = TextStyle(
     fontFamily: fontFamily,
-    fontSize: 36,
+    fontSize: 34,
     fontWeight: FontWeight.w600,
-    letterSpacing: 0,
-    height: 1.22,
+    letterSpacing: -0.75,
+    height: 1.12,
   );
 
   // ===========================
@@ -49,26 +52,26 @@ class AppTypography {
 
   static const TextStyle headlineLarge = TextStyle(
     fontFamily: fontFamily,
-    fontSize: 32,
+    fontSize: 30,
     fontWeight: FontWeight.w600,
-    letterSpacing: 0,
-    height: 1.25,
+    letterSpacing: -0.55,
+    height: 1.18,
   );
 
   static const TextStyle headlineMedium = TextStyle(
     fontFamily: fontFamily,
-    fontSize: 28,
+    fontSize: 26,
     fontWeight: FontWeight.w600,
-    letterSpacing: 0,
-    height: 1.29,
+    letterSpacing: -0.4,
+    height: 1.23,
   );
 
   static const TextStyle headlineSmall = TextStyle(
     fontFamily: fontFamily,
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: FontWeight.w600,
-    letterSpacing: 0,
-    height: 1.33,
+    letterSpacing: -0.25,
+    height: 1.27,
   );
 
   // ===========================
@@ -78,8 +81,8 @@ class AppTypography {
   static const TextStyle titleLarge = TextStyle(
     fontFamily: fontFamily,
     fontSize: 22,
-    fontWeight: FontWeight.w500,
-    letterSpacing: 0,
+    fontWeight: FontWeight.w600,
+    letterSpacing: -0.2,
     height: 1.27,
   );
 
@@ -87,16 +90,16 @@ class AppTypography {
     fontFamily: fontFamily,
     fontSize: 16,
     fontWeight: FontWeight.w600,
-    letterSpacing: 0.15,
-    height: 1.5,
+    letterSpacing: -0.05,
+    height: 1.4,
   );
 
   static const TextStyle titleSmall = TextStyle(
     fontFamily: fontFamily,
     fontSize: 14,
     fontWeight: FontWeight.w600,
-    letterSpacing: 0.1,
-    height: 1.43,
+    letterSpacing: 0,
+    height: 1.36,
   );
 
   // ===========================
@@ -107,24 +110,24 @@ class AppTypography {
     fontFamily: fontFamily,
     fontSize: 16,
     fontWeight: FontWeight.w400,
-    letterSpacing: 0.5,
-    height: 1.5,
+    letterSpacing: 0,
+    height: 1.55,
   );
 
   static const TextStyle bodyMedium = TextStyle(
     fontFamily: fontFamily,
     fontSize: 14,
     fontWeight: FontWeight.w400,
-    letterSpacing: 0.25,
-    height: 1.43,
+    letterSpacing: 0,
+    height: 1.5,
   );
 
   static const TextStyle bodySmall = TextStyle(
     fontFamily: fontFamily,
     fontSize: 12,
     fontWeight: FontWeight.w400,
-    letterSpacing: 0.4,
-    height: 1.33,
+    letterSpacing: 0.05,
+    height: 1.42,
   );
 
   // ===========================
@@ -136,14 +139,14 @@ class AppTypography {
     fontSize: 14,
     fontWeight: FontWeight.w600,
     letterSpacing: 0.1,
-    height: 1.43,
+    height: 1.35,
   );
 
   static const TextStyle labelMedium = TextStyle(
     fontFamily: fontFamily,
     fontSize: 12,
     fontWeight: FontWeight.w600,
-    letterSpacing: 0.5,
+    letterSpacing: 0.25,
     height: 1.33,
   );
 
@@ -151,8 +154,8 @@ class AppTypography {
     fontFamily: fontFamily,
     fontSize: 11,
     fontWeight: FontWeight.w500,
-    letterSpacing: 0.5,
-    height: 1.45,
+    letterSpacing: 0.2,
+    height: 1.36,
   );
 
   // ===========================
@@ -164,8 +167,8 @@ class AppTypography {
     fontFamily: fontFamily,
     fontSize: 15,
     fontWeight: FontWeight.w400,
-    letterSpacing: 0.15,
-    height: 1.4,
+    letterSpacing: 0,
+    height: 1.47,
   );
 
   /// Timestamp text
@@ -173,8 +176,8 @@ class AppTypography {
     fontFamily: fontFamily,
     fontSize: 11,
     fontWeight: FontWeight.w400,
-    letterSpacing: 0.3,
-    height: 1.27,
+    letterSpacing: 0.1,
+    height: 1.35,
   );
 
   /// Badge text (notification counts, etc.)
@@ -182,7 +185,7 @@ class AppTypography {
     fontFamily: fontFamily,
     fontSize: 10,
     fontWeight: FontWeight.w700,
-    letterSpacing: 0.2,
+    letterSpacing: 0.1,
     height: 1.2,
   );
 
@@ -191,8 +194,8 @@ class AppTypography {
     fontFamily: fontFamily,
     fontSize: 15,
     fontWeight: FontWeight.w600,
-    letterSpacing: 0.5,
-    height: 1.2,
+    letterSpacing: 0.1,
+    height: 1.3,
   );
 
   // ===========================
