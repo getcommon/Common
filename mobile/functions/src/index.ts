@@ -3,6 +3,10 @@ import { onDocumentCreated, onDocumentUpdated } from 'firebase-functions/v2/fire
 import { setGlobalOptions } from 'firebase-functions/v2';
 import * as admin from 'firebase-admin';
 import { hasFreshPresence } from './presence';
+import {
+  discoveryEligibility,
+  selectedSearchRadiusKm,
+} from './discovery_eligibility';
 
 // Initialize Firebase Admin
 admin.initializeApp();
@@ -33,6 +37,11 @@ interface UserProfile {
   createdAt: admin.firestore.Timestamp;
   updatedAt: admin.firestore.Timestamp;
   location?: UserLocation;
+  searchRadiusKm?: number;
+  safety?: {
+    blockedUserIds?: string[];
+    unmatchedUserIds?: string[];
+  };
 }
 
 interface PublicDiscoverProfile {
@@ -49,13 +58,6 @@ interface ProximityMatch {
   distanceKm: number;
   commonInterests: string[];
   matchScore: number;
-}
-
-interface FindMatchesRequest {
-  currentUserUid: string;
-  maxDistanceKm?: number;
-  minCommonInterests?: number;
-  limit?: number;
 }
 
 interface FindMatchesResponse {
@@ -116,6 +118,14 @@ export const sendWave = onCall({ region: 'us-central1' }, async (request) => {
     if (!sender.exists || !receiver.exists) {
       throw new HttpsError('not-found', 'That profile is no longer available.');
     }
+    const senderProfile = sender.data() as UserProfile;
+    const receiverProfile = receiver.data() as UserProfile;
+    if (!discoveryEligibility(senderProfile, senderId, receiverProfile, receiverId)) {
+      throw new HttpsError(
+        'failed-precondition',
+        'This member is no longer eligible for discovery.',
+      );
+    }
     if (todayWaves.size >= dailyWaveLimit) {
       throw new HttpsError('resource-exhausted', 'Today’s waves have been used.');
     }
@@ -128,8 +138,8 @@ export const sendWave = onCall({ region: 'us-central1' }, async (request) => {
       timestamp: admin.firestore.FieldValue.serverTimestamp(),
       status: 'pending',
       respondedAt: null,
-      senderProfile: profilePreview(sender.data()!),
-      receiverProfile: profilePreview(receiver.data()!),
+      senderProfile: profilePreview(senderProfile),
+      receiverProfile: profilePreview(receiverProfile),
     });
   });
 
@@ -228,60 +238,6 @@ export const respondToWave = onCall({ region: 'us-central1' }, async (request) =
 });
 
 /**
- * Calculate distance between two coordinates using Haversine formula
- */
-function calculateDistance(
-  lat1: number,
-  lon1: number,
-  lat2: number,
-  lon2: number
-): number {
-  const R = 6371; // Earth's radius in kilometers
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLon = (lon2 - lon1) * Math.PI / 180;
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(lat1 * Math.PI / 180) *
-      Math.cos(lat2 * Math.PI / 180) *
-      Math.sin(dLon / 2) *
-      Math.sin(dLon / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
-}
-
-/**
- * Get common interests between two users using Set intersection
- */
-function getCommonInterests(
-  interests1: string[],
-  interests2: string[]
-): string[] {
-  const set1 = new Set(interests1);
-  return interests2.filter(interest => set1.has(interest));
-}
-
-/**
- * Calculate match score based on interests and distance
- */
-function calculateMatchScore(
-  commonInterestsCount: number,
-  currentUserInterestsCount: number,
-  otherUserInterestsCount: number,
-  distanceKm: number
-): number {
-  // Interest similarity score (0-1) - Jaccard similarity
-  const interestSimilarity =
-    commonInterestsCount /
-    (currentUserInterestsCount + otherUserInterestsCount - commonInterestsCount);
-
-  // Distance score (closer is better, 0-1)
-  const distanceScore = (10 - Math.min(distanceKm, 10)) / 10;
-
-  // Weighted combination: 70% interests, 30% distance
-  return (interestSimilarity * 0.7) + (distanceScore * 0.3);
-}
-
-/**
  * Get nearby geohashes for proximity search
  */
 function getNearbyGeohashes(
@@ -309,7 +265,6 @@ function getNearbyGeohashes(
 export const findNearbyMatches = onCall(
   { region: 'us-central1' },
   async (request): Promise<FindMatchesResponse> => {
-    const data = request.data as FindMatchesRequest;
     const context = request.auth;
     const startTime = Date.now();
     
@@ -324,11 +279,6 @@ export const findNearbyMatches = onCall(
     const currentUserUid = context.uid;
     // Radius is always the member's own selected setting, capped to the
     // product's preferred 0.5-mile range. The caller cannot widen it.
-    const maxDistanceKm = Math.min(
-      Math.max(Number((data as any).maxDistanceKm ?? 0.8), 0.1),
-      0.8,
-    );
-    const minCommonInterests = 1;
     const limit = 10;
 
     try {
@@ -344,6 +294,7 @@ export const findNearbyMatches = onCall(
       }
 
       const currentUserProfile = currentUserDoc.data() as UserProfile;
+      const selectedRadiusKm = selectedSearchRadiusKm(currentUserProfile);
       
       // Validate user has location and interests
       if (!hasFreshPresence(currentUserProfile.location)) {
@@ -366,7 +317,8 @@ export const findNearbyMatches = onCall(
       const currentLat = currentUserProfile.location.latitude;
       const currentLng = currentUserProfile.location.longitude;
 
-      if (!currentLat || !currentLng) {
+      if (!Number.isFinite(currentLat) || !Number.isFinite(currentLng) ||
+          typeof currentGeohash !== 'string' || !currentGeohash) {
         throw new HttpsError(
           'invalid-argument',
           'Current user location coordinates not available'
@@ -374,7 +326,7 @@ export const findNearbyMatches = onCall(
       }
 
       // Get nearby geohashes
-      const nearbyGeohashes = getNearbyGeohashes(currentGeohash, maxDistanceKm);
+      const nearbyGeohashes = getNearbyGeohashes(currentGeohash, selectedRadiusKm);
 
       console.log(`🔍 PROXIMITY SEARCH STARTED for user: ${currentUserProfile.displayName}`);
       console.log(`📍 Current location: ${currentLat}, ${currentLng}`);
@@ -407,46 +359,15 @@ export const findNearbyMatches = onCall(
         try {
           const userProfile = doc.data() as UserProfile;
 
-          // A visible flag is not enough: matching must stop when the member's
-          // foreground presence has not been refreshed in time.
-          if (!hasFreshPresence(userProfile.location)) {
-            continue;
-          }
-
-          // Check if user has location coordinates
-          if (!userProfile.location?.latitude || !userProfile.location?.longitude) {
-            continue;
-          }
-
-          // Calculate distance
-          const distance = calculateDistance(
-            currentLat,
-            currentLng,
-            userProfile.location.latitude,
-            userProfile.location.longitude
+          const eligibility = discoveryEligibility(
+            currentUserProfile,
+            currentUserUid,
+            userProfile,
+            doc.id,
           );
+          if (!eligibility) continue;
 
-          // Filter by distance
-          if (distance > maxDistanceKm) continue;
-
-          // Get common interests
-          const commonInterests = getCommonInterests(
-            currentUserProfile.interests,
-            userProfile.interests
-          );
-
-          // Filter by minimum common interests
-          if (commonInterests.length < minCommonInterests) continue;
-
-          // Calculate match score
-          const matchScore = calculateMatchScore(
-            commonInterests.length,
-            currentUserProfile.interests.length,
-            userProfile.interests.length,
-            distance
-          );
-
-          const coarseDistanceKm = distance < 0.48 ? 0.2 : distance < 0.8 ? 0.5 : 0.8;
+          const coarseDistanceKm = eligibility.distanceKm < 0.48 ? 0.2 : 0.5;
           matches.push({
             userProfile: {
               uid: doc.id,
@@ -459,8 +380,8 @@ export const findNearbyMatches = onCall(
             // Representative band only: clients never receive exact distance
             // or the underlying location document.
             distanceKm: coarseDistanceKm,
-            commonInterests,
-            matchScore
+            commonInterests: eligibility.commonInterests,
+            matchScore: eligibility.matchScore
           });
 
         } catch (error) {

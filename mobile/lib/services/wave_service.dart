@@ -31,9 +31,13 @@ class WaveService {
           .httpsCallable('sendWave')
           .call<Map<String, dynamic>>({'receiverId': receiverId});
       return response.data['waveId'] as String?;
+    } on FirebaseFunctionsException catch (error) {
+      if (error.code == 'already-exists') return null;
+      debugPrint('Error sending wave: $error');
+      rethrow;
     } catch (e) {
       debugPrint('Error sending wave: $e');
-      return null;
+      rethrow;
     }
   }
 

@@ -57,7 +57,10 @@ class MyApp extends StatelessWidget {
       // Named routes for navigation
       routes: {
         '/app': (_) => const AppShell(),
-        '/welcome': (_) => const WelcomePage(),
+        // Onboarding replaces its route with `/welcome`. This must remain the
+        // auth-aware gate rather than a standalone login screen, otherwise a
+        // successful sign-in has nothing watching auth state to advance it.
+        '/welcome': (_) => const BootstrapGate(),
       },
 
       // Bootstrap gate handles initial routing logic
@@ -86,6 +89,8 @@ class _BootstrapGateState extends State<BootstrapGate>
     with WidgetsBindingObserver {
   String? _activeUserId;
   bool _hasAuthenticatedThisSession = false;
+  String? _servicesUserId;
+  Future<void>? _servicesInitialization;
 
   @override
   void initState() {
@@ -101,8 +106,7 @@ class _BootstrapGateState extends State<BootstrapGate>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.inactive ||
-        state == AppLifecycleState.paused ||
+    if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.detached) {
       final userId = _activeUserId;
       if (userId != null) {
@@ -123,6 +127,15 @@ class _BootstrapGateState extends State<BootstrapGate>
     _activeUserId = uid;
     debugPrint('🔍 _initUserServices: Starting for uid=$uid');
 
+    // Google and Apple sign-in can create an Auth user before Firestore has a
+    // profile document. Ensure the profile flow always has a document to
+    // watch, rather than falling back to a standalone login screen.
+    await ProfileService.instance.ensureDoc(
+      uid,
+      displayName: FirebaseAuth.instance.currentUser?.displayName,
+      photoUrl: FirebaseAuth.instance.currentUser?.photoURL,
+    );
+
     try {
       debugPrint('🔍 _initUserServices: Initializing FCM...');
       // Initialize FCM for push notifications
@@ -133,6 +146,15 @@ class _BootstrapGateState extends State<BootstrapGate>
     }
 
     debugPrint('🔍 _initUserServices: Completed');
+  }
+
+  Future<void> _initializeUserServicesOnce(String uid) {
+    if (_servicesUserId == uid && _servicesInitialization != null) {
+      return _servicesInitialization!;
+    }
+    _servicesUserId = uid;
+    _servicesInitialization = _initUserServices(uid);
+    return _servicesInitialization!;
   }
 
   @override
@@ -169,6 +191,8 @@ class _BootstrapGateState extends State<BootstrapGate>
             debugPrint('🔍 BootstrapGate: User = ${user?.uid ?? "null"}');
             if (user == null) {
               _activeUserId = null;
+              _servicesUserId = null;
+              _servicesInitialization = null;
               // Onboarding is only for a genuinely new launch. Once someone
               // has had an authenticated session, signing out should always
               // return them to the login screen.
@@ -197,7 +221,7 @@ class _BootstrapGateState extends State<BootstrapGate>
               '🔍 BootstrapGate: Initializing user services for ${user.uid}...',
             );
             return FutureBuilder<void>(
-              future: _initUserServices(user.uid),
+              future: _initializeUserServicesOnce(user.uid),
               builder: (context, initSnap) {
                 debugPrint(
                   '🔍 BootstrapGate: Service init state = ${initSnap.connectionState}',

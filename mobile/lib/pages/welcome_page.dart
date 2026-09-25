@@ -19,7 +19,7 @@ class WelcomePage extends StatefulWidget {
 
 class _WelcomePageState extends State<WelcomePage>
     with SingleTickerProviderStateMixin {
-  bool _loading = false;
+  _SignInProvider? _signingInProvider;
   String? _error;
   late final AnimationController _entranceController;
 
@@ -40,7 +40,7 @@ class _WelcomePageState extends State<WelcomePage>
 
   Future<void> _handleGoogleSignIn() async {
     setState(() {
-      _loading = true;
+      _signingInProvider = _SignInProvider.google;
       _error = null;
     });
     try {
@@ -50,13 +50,13 @@ class _WelcomePageState extends State<WelcomePage>
       debugPrint('Google sign-in failed: $error');
       if (mounted) setState(() => _error = 'Google sign-in failed: $error');
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) setState(() => _signingInProvider = null);
     }
   }
 
   Future<void> _handleAppleSignIn() async {
     setState(() {
-      _loading = true;
+      _signingInProvider = _SignInProvider.apple;
       _error = null;
     });
     try {
@@ -66,7 +66,7 @@ class _WelcomePageState extends State<WelcomePage>
       debugPrint('Apple sign-in failed: $error');
       if (mounted) setState(() => _error = 'Apple sign-in failed: $error');
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) setState(() => _signingInProvider = null);
     }
   }
 
@@ -167,8 +167,11 @@ class _WelcomePageState extends State<WelcomePage>
                           const SizedBox(height: 14),
                         ],
                         _AuthButton(
-                          onPressed: _loading ? null : _handleGoogleSignIn,
-                          loading: _loading,
+                          onPressed: _signingInProvider == null
+                              ? _handleGoogleSignIn
+                              : null,
+                          loading:
+                              _signingInProvider == _SignInProvider.google,
                           icon: const FaIcon(FontAwesomeIcons.google, size: 18),
                           label: 'Continue with Google',
                           backgroundColor: isDark
@@ -182,8 +185,11 @@ class _WelcomePageState extends State<WelcomePage>
                         if (supportsAppleSignIn) ...[
                           const SizedBox(height: 12),
                           _AuthButton(
-                            onPressed: _loading ? null : _handleAppleSignIn,
-                            loading: _loading,
+                            onPressed: _signingInProvider == null
+                                ? _handleAppleSignIn
+                                : null,
+                            loading:
+                                _signingInProvider == _SignInProvider.apple,
                             icon: const FaIcon(
                               FontAwesomeIcons.apple,
                               size: 20,
@@ -218,6 +224,8 @@ class _WelcomePageState extends State<WelcomePage>
     );
   }
 }
+
+enum _SignInProvider { google, apple }
 
 class _Wordmark extends StatelessWidget {
   const _Wordmark();
