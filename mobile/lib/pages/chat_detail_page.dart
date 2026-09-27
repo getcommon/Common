@@ -330,7 +330,6 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
     if (confirmed != true || !mounted) return;
     if (action == _SafetyAction.report) {
       await SafetyService.instance.report(
-        reporterId: _currentUserId,
         subjectId: widget.otherUserId,
         conversationId: widget.conversationId,
         reason: 'Member report',

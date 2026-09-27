@@ -1,6 +1,7 @@
 // lib/services/auth_service.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart' show WidgetsBinding;
 import 'package:google_sign_in/google_sign_in.dart';
@@ -185,5 +186,15 @@ class AuthService {
     } finally {
       isSigningOut.value = false;
     }
+  }
+
+  /// Permanently removes the signed-in member and their Common data.
+  /// The callable owns cleanup so a partially completed client operation cannot
+  /// leave private data behind.
+  Future<void> deleteAccount() async {
+    await FirebaseFunctions.instance
+        .httpsCallable('deleteUserAccount')
+        .call<void>({'confirm': true});
+    await signOut();
   }
 }

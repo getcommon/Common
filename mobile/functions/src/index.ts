@@ -67,6 +67,30 @@ interface FindMatchesResponse {
 }
 
 const dailyWaveLimit = 3;
+const batchDeleteLimit = 400;
+
+async function deleteQuery(query: FirebaseFirestore.Query): Promise<void> {
+  const db = admin.firestore();
+  while (true) {
+    const snapshot = await query.limit(batchDeleteLimit).get();
+    if (snapshot.empty) return;
+
+    const batch = db.batch();
+    for (const document of snapshot.docs) {
+      batch.delete(document.ref);
+    }
+    await batch.commit();
+  }
+}
+
+async function deleteConversation(conversationId: string): Promise<void> {
+  const db = admin.firestore();
+  await deleteQuery(
+    db.collection('messages').where('conversationId', '==', conversationId),
+  );
+  await deleteQuery(db.collection('conversations').doc(conversationId).collection('_counters'));
+  await db.collection('conversations').doc(conversationId).delete();
+}
 
 function connectionId(firstUserId: string, secondUserId: string): string {
   return [firstUserId, secondUserId].sort().join('_');
@@ -235,6 +259,94 @@ export const respondToWave = onCall({ region: 'us-central1' }, async (request) =
     matchId = id;
   });
   return { matchId };
+});
+
+/**
+ * Creates a moderation case from a member report. The client never gets read
+ * access to reports; trusted moderators review `reports` in Firebase Admin.
+ */
+export const submitReport = onCall({ region: 'us-central1' }, async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'Sign in to submit a report.');
+  }
+  const subjectId = request.data?.subjectId;
+  const reason = request.data?.reason;
+  const conversationId = request.data?.conversationId;
+  if (typeof subjectId !== 'string' || !subjectId || subjectId === request.auth.uid ||
+      typeof reason !== 'string' || !reason.trim()) {
+    throw new HttpsError('invalid-argument', 'A member and report reason are required.');
+  }
+  if (conversationId != null && (typeof conversationId !== 'string' || !conversationId)) {
+    throw new HttpsError('invalid-argument', 'The conversation reference is invalid.');
+  }
+
+  const db = admin.firestore();
+  const [subject, conversation] = await Promise.all([
+    db.collection('users').doc(subjectId).get(),
+    conversationId ? db.collection('conversations').doc(conversationId).get() : null,
+  ]);
+  if (!subject.exists) {
+    throw new HttpsError('not-found', 'That member is no longer available.');
+  }
+  if (conversationId && (!conversation?.exists ||
+      !Array.isArray(conversation.data()?.participantIds) ||
+      !conversation.data()!.participantIds.includes(request.auth.uid) ||
+      !conversation.data()!.participantIds.includes(subjectId))) {
+    throw new HttpsError('permission-denied', 'You can report only members in your conversation.');
+  }
+
+  const report = await db.collection('reports').add({
+    reporterId: request.auth.uid,
+    subjectId,
+    reason: reason.trim().slice(0, 500),
+    conversationId: conversationId ?? null,
+    status: 'open',
+    reviewedAt: null,
+    resolution: null,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+  return { reportId: report.id };
+});
+
+/**
+ * Permanently removes a member's account and the product data associated with
+ * it. This is intentionally server-side so clients cannot leave orphaned
+ * conversations, messages, or Firebase Authentication identities behind.
+ */
+export const deleteUserAccount = onCall({ region: 'us-central1' }, async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'Sign in to delete your account.');
+  }
+  if (request.data?.confirm !== true) {
+    throw new HttpsError('failed-precondition', 'Confirm account deletion before continuing.');
+  }
+
+  const db = admin.firestore();
+  const userId = request.auth.uid;
+  const conversations = await db
+    .collection('conversations')
+    .where('participantIds', 'array-contains', userId)
+    .get();
+
+  await Promise.all(conversations.docs.map((conversation) => deleteConversation(conversation.id)));
+  await Promise.all([
+    deleteQuery(db.collection('messages').where('senderId', '==', userId)),
+    deleteQuery(db.collection('waves').where('senderId', '==', userId)),
+    deleteQuery(db.collection('waves').where('receiverId', '==', userId)),
+    deleteQuery(db.collection('mutual_matches').where('user1Id', '==', userId)),
+    deleteQuery(db.collection('mutual_matches').where('user2Id', '==', userId)),
+    deleteQuery(db.collection('reports').where('reporterId', '==', userId)),
+    deleteQuery(db.collection('reports').where('subjectId', '==', userId)),
+  ]);
+  await db.collection('users').doc(userId).delete();
+
+  try {
+    await admin.storage().bucket().file(`profile_pictures/${userId}.jpg`).delete();
+  } catch (error: any) {
+    if (error?.code !== 404) throw error;
+  }
+  await admin.auth().deleteUser(userId);
+  return { deleted: true };
 });
 
 /**

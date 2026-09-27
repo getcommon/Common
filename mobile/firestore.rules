@@ -108,9 +108,9 @@ service cloud.firestore {
     }
 
     match /reports/{reportId} {
-      allow create: if isSignedIn() &&
-        request.resource.data.reporterId == request.auth.uid;
-      allow read, update, delete: if false;
+      // Callable functions validate report subjects, conversation membership,
+      // and assign moderation workflow fields. Reports are moderator-only.
+      allow read, create, update, delete: if false;
     }
   }
 }

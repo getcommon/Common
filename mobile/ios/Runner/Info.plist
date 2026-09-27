@@ -38,9 +38,9 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>Common Grounds needs your location to help you find nearby students with similar interests for meaningful connections.</string>
+	<string>Common Grounds uses your location to help you discover potential friends nearby who share your interests. Your exact location is never shown.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Common Grounds needs your location to help you find nearby students with similar interests for meaningful connections.</string>
+	<string>Common Grounds uses your location to help you discover potential friends nearby who share your interests. Your exact location is never shown.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

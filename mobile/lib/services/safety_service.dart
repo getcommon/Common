@@ -2,6 +2,7 @@
 library;
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 
 class SafetyService {
   SafetyService._();
@@ -34,17 +35,18 @@ class SafetyService {
   });
 
   Future<void> report({
-    required String reporterId,
     required String subjectId,
     required String reason,
     String? conversationId,
-  }) => _db.collection('reports').add({
-    'reporterId': reporterId,
-    'subjectId': subjectId,
-    'reason': reason,
-    'conversationId': conversationId,
-    'createdAt': FieldValue.serverTimestamp(),
-  });
+  }) async {
+    await FirebaseFunctions.instance
+        .httpsCallable('submitReport')
+        .call<void>({
+          'subjectId': subjectId,
+          'reason': reason,
+          'conversationId': conversationId,
+        });
+  }
 
   Future<void> _update(String userId, Map<String, Object> changes) =>
       _db.collection('users').doc(userId).set({

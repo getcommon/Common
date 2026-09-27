@@ -92,6 +92,19 @@ class SettingsPage extends StatelessWidget {
                   ),
                 ),
               ),
+              const SizedBox(height: 8),
+              TextButton.icon(
+                onPressed: () => _confirmAccountDeletion(context),
+                icon: const Icon(Icons.delete_forever_outlined, size: 18),
+                label: const Text('Delete account'),
+                style: TextButton.styleFrom(
+                  foregroundColor: Theme.of(context).colorScheme.error,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 4,
+                    vertical: 12,
+                  ),
+                ),
+              ),
             ],
           );
         },
@@ -123,6 +136,49 @@ class SettingsPage extends StatelessWidget {
       // replaces the shell, otherwise this route stays visible over login.
       navigator.pop();
       await AuthService.instance.signOut();
+    }
+  }
+
+  Future<void> _confirmAccountDeletion(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete your account?'),
+        content: const Text(
+          'This permanently removes your profile, photo, waves, connections, '
+          'conversations, messages, and reports. This cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(dialogContext).colorScheme.error,
+            ),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Delete account'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+
+    final navigator = Navigator.of(context);
+    try {
+      await AuthService.instance.deleteAccount();
+      // Account deletion signs the user out, so BootstrapGate has already
+      // replaced the root with WelcomePage. Remove this pushed Settings route
+      // as well; otherwise it stays on top until the member taps Back.
+      navigator.popUntil((route) => route.isFirst);
+    } catch (_) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('We could not delete your account. Please try again.'),
+        ),
+      );
     }
   }
 }
