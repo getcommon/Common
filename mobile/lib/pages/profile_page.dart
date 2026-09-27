@@ -109,6 +109,7 @@ class _ProfileHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final visible = profile.location?.isVisible ?? false;
+    final colors = Theme.of(context).colorScheme;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -118,7 +119,7 @@ class _ProfileHeader extends StatelessWidget {
             Text(
               'COMMON GROUNDS',
               style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                color: AppColors.textSecondaryLight,
+                color: colors.onSurfaceVariant,
                 fontWeight: FontWeight.w600,
                 letterSpacing: 1.2,
               ),
@@ -131,9 +132,9 @@ class _ProfileHeader extends StatelessWidget {
                 ),
               ),
               icon: const Icon(Icons.settings_outlined),
-              color: AppColors.textPrimaryLight,
+              color: colors.onSurface,
               style: IconButton.styleFrom(
-                backgroundColor: AppColors.surfaceVariantLight,
+                backgroundColor: colors.surfaceContainerHighest,
               ),
               tooltip: 'Settings',
             ),
@@ -142,7 +143,7 @@ class _ProfileHeader extends StatelessWidget {
         const SizedBox(height: 22),
         CircleAvatar(
           radius: 46,
-          backgroundColor: AppColors.surfaceVariantLight,
+          backgroundColor: colors.surfaceContainerHighest,
           backgroundImage: profile.photoUrl == null || profile.photoUrl!.isEmpty
               ? null
               : NetworkImage(profile.photoUrl!),
@@ -191,7 +192,7 @@ class _ProfileHeader extends StatelessWidget {
           visible ? 'Nearby · discoverable' : 'Nearby · discovery paused',
           style: Theme.of(
             context,
-          ).textTheme.bodyMedium?.copyWith(color: AppColors.textSecondaryLight),
+          ).textTheme.bodyMedium?.copyWith(color: colors.onSurfaceVariant),
         ),
       ],
     );
@@ -205,6 +206,7 @@ class _LocationSummary extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final visible = profile.location?.isVisible ?? false;
+    final colors = Theme.of(context).colorScheme;
     return InkWell(
       borderRadius: BorderRadius.circular(12),
       onTap: () => showModalBottomSheet<void>(
@@ -229,7 +231,7 @@ class _LocationSummary extends StatelessWidget {
                   Text(
                     'Choose whether you appear nearby and how close someone needs to be.',
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: AppColors.textSecondaryLight,
+                      color: colors.onSurfaceVariant,
                     ),
                   ),
                   const SizedBox(height: 26),
@@ -268,16 +270,13 @@ class _LocationSummary extends StatelessWidget {
                         ? 'Your nearby range is set in a privacy-safe way.'
                         : 'Tap to choose when you appear in Discover.',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: AppColors.textSecondaryLight,
+                      color: colors.onSurfaceVariant,
                     ),
                   ),
                 ],
               ),
             ),
-            Icon(
-              Icons.chevron_right_rounded,
-              color: AppColors.textSecondaryLight,
-            ),
+            Icon(Icons.chevron_right_rounded, color: colors.onSurfaceVariant),
           ],
         ),
       ),
@@ -392,7 +391,7 @@ class _SectionHeading extends StatelessWidget {
   Widget build(BuildContext context) => Text(
     label,
     style: Theme.of(context).textTheme.labelSmall?.copyWith(
-      color: AppColors.textSecondaryLight,
+      color: Theme.of(context).colorScheme.onSurfaceVariant,
       fontWeight: FontWeight.w600,
       letterSpacing: 1.1,
     ),
@@ -403,21 +402,24 @@ class _InterestChip extends StatelessWidget {
   const _InterestChip(this.label);
   final String label;
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-    decoration: BoxDecoration(
-      color: const Color(0xFFF4E3DB),
-      borderRadius: BorderRadius.circular(20),
-    ),
-    child: Text(
-      label,
-      style: const TextStyle(
-        color: AppColors.primaryDark,
-        fontSize: 13,
-        fontWeight: FontWeight.w600,
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: colors.primaryContainer,
+        borderRadius: BorderRadius.circular(20),
       ),
-    ),
-  );
+      child: Text(
+        label,
+        style: TextStyle(
+          color: colors.onPrimaryContainer,
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
 }
 
 class _PlainText extends StatelessWidget {
@@ -426,9 +428,9 @@ class _PlainText extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Text(
     text,
-    style: Theme.of(
-      context,
-    ).textTheme.bodyMedium?.copyWith(color: AppColors.textSecondaryLight),
+    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+      color: Theme.of(context).colorScheme.onSurfaceVariant,
+    ),
   );
 }
 

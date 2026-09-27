@@ -16,6 +16,7 @@ import 'services/messaging_service.dart';
 import 'services/location_service.dart';
 import 'services/local_prefs.dart';
 import 'services/auth_service.dart';
+import 'services/theme_controller.dart';
 
 // Design system imports
 import 'core/theme/app_theme.dart';
@@ -29,6 +30,7 @@ void main() async {
 
   // Initialize Firebase
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  await ThemeController.instance.load();
 
   // Wrap the app with ProviderScope for Riverpod state management
   runApp(const ProviderScope(child: MyApp()));
@@ -46,25 +48,28 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Common Grounds',
-      debugShowCheckedModeBanner: false,
+    return ValueListenableBuilder<ThemeMode>(
+      valueListenable: ThemeController.instance,
+      builder: (context, themeMode, child) => MaterialApp(
+        title: 'Common Grounds',
+        debugShowCheckedModeBanner: false,
 
-      // Apply custom theme with light/dark mode support
-      theme: AppTheme.lightTheme,
-      darkTheme: AppTheme.darkTheme,
-      themeMode: ThemeMode.system, // Follows system preference
-      // Named routes for navigation
-      routes: {
-        '/app': (_) => const AppShell(),
-        // Onboarding replaces its route with `/welcome`. This must remain the
-        // auth-aware gate rather than a standalone login screen, otherwise a
-        // successful sign-in has nothing watching auth state to advance it.
-        '/welcome': (_) => const BootstrapGate(),
-      },
+        // Apply custom theme with light/dark mode support
+        theme: AppTheme.lightTheme,
+        darkTheme: AppTheme.darkTheme,
+        themeMode: themeMode,
+        // Named routes for navigation
+        routes: {
+          '/app': (_) => const AppShell(),
+          // Onboarding replaces its route with `/welcome`. This must remain the
+          // auth-aware gate rather than a standalone login screen, otherwise a
+          // successful sign-in has nothing watching auth state to advance it.
+          '/welcome': (_) => const BootstrapGate(),
+        },
 
-      // Bootstrap gate handles initial routing logic
-      home: const BootstrapGate(),
+        // Bootstrap gate handles initial routing logic
+        home: const BootstrapGate(),
+      ),
     );
   }
 }

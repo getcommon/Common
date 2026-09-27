@@ -239,6 +239,7 @@ class _ProfileSetupPageState extends State<ProfileSetupPage> {
     // Validate interest selection
     final validationError = validateInterestSelection(_interests.toList());
     final canSave = validationError == null;
+    final colors = Theme.of(context).colorScheme;
     return Scaffold(
       appBar: AppBar(
         automaticallyImplyLeading: false,
@@ -246,7 +247,7 @@ class _ProfileSetupPageState extends State<ProfileSetupPage> {
         leading: TextButton(
           onPressed: () => Navigator.of(context).maybePop(),
           style: TextButton.styleFrom(
-            foregroundColor: AppColors.textSecondaryLight,
+            foregroundColor: colors.onSurfaceVariant,
             padding: const EdgeInsets.only(left: 16),
             alignment: Alignment.centerLeft,
           ),
@@ -287,9 +288,9 @@ class _ProfileSetupPageState extends State<ProfileSetupPage> {
             const SizedBox(height: 7),
             Text(
               'A few details make it easier to find your people.',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: AppColors.textSecondaryLight,
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(color: colors.onSurfaceVariant),
             ),
             const SizedBox(height: 26),
             Row(
@@ -338,13 +339,21 @@ class _ProfileSetupPageState extends State<ProfileSetupPage> {
             const SizedBox(height: 13),
             TextField(
               controller: _name,
-              decoration: _editorInputDecoration('Display name'),
+              decoration: _editorInputDecoration(context, 'Display name'),
+              style: Theme.of(
+                context,
+              ).textTheme.bodyLarge?.copyWith(color: colors.onSurface),
+              cursorColor: colors.primary,
               textCapitalization: TextCapitalization.words,
             ),
             const SizedBox(height: 17),
             TextField(
               controller: _bio,
-              decoration: _editorInputDecoration('A little about you'),
+              decoration: _editorInputDecoration(context, 'A little about you'),
+              style: Theme.of(
+                context,
+              ).textTheme.bodyLarge?.copyWith(color: colors.onSurface),
+              cursorColor: colors.primary,
               maxLines: 3,
             ),
             const SizedBox(height: 24),
@@ -357,7 +366,7 @@ class _ProfileSetupPageState extends State<ProfileSetupPage> {
                 Text(
                   '${_interests.length} selected',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: AppColors.textSecondaryLight,
+                    color: colors.onSurfaceVariant,
                   ),
                 ),
               ],
@@ -369,7 +378,7 @@ class _ProfileSetupPageState extends State<ProfileSetupPage> {
                 child: Text(
                   'Choose at least 5 interests from two or more categories.',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: AppColors.textSecondaryLight,
+                    color: colors.onSurfaceVariant,
                   ),
                 ),
               ),
@@ -385,10 +394,10 @@ class _ProfileSetupPageState extends State<ProfileSetupPage> {
                         onPressed: () =>
                             setState(() => _interests.remove(interest)),
                         selected: true,
-                        selectedColor: const Color(0xFFF4E3DB),
+                        selectedColor: colors.primaryContainer,
                         showCheckmark: false,
-                        labelStyle: const TextStyle(
-                          color: AppColors.primaryDark,
+                        labelStyle: TextStyle(
+                          color: colors.onPrimaryContainer,
                           fontWeight: FontWeight.w600,
                         ),
                         side: BorderSide.none,
@@ -424,10 +433,8 @@ class _ProfileSetupPageState extends State<ProfileSetupPage> {
 
                 return Container(
                   margin: const EdgeInsets.only(bottom: 8),
-                  decoration: const BoxDecoration(
-                    border: Border(
-                      bottom: BorderSide(color: AppColors.dividerLight),
-                    ),
+                  decoration: BoxDecoration(
+                    border: Border(bottom: BorderSide(color: colors.outline)),
                   ),
                   child: Column(
                     children: [
@@ -442,7 +449,7 @@ class _ProfileSetupPageState extends State<ProfileSetupPage> {
                           style: TextStyle(
                             color: selectedInCategory > 0
                                 ? AppColors.primary
-                                : AppColors.textSecondaryLight,
+                                : colors.onSurfaceVariant,
                           ),
                         ),
                         trailing: Icon(
@@ -492,10 +499,8 @@ class _ProfileSetupPageState extends State<ProfileSetupPage> {
               Container(
                 margin: const EdgeInsets.only(bottom: 8),
                 padding: const EdgeInsets.only(top: 8, bottom: 12),
-                decoration: const BoxDecoration(
-                  border: Border(
-                    bottom: BorderSide(color: AppColors.dividerLight),
-                  ),
+                decoration: BoxDecoration(
+                  border: Border(bottom: BorderSide(color: colors.outline)),
                 ),
                 child: Padding(
                   padding: const EdgeInsets.all(12),
@@ -515,11 +520,11 @@ class _ProfileSetupPageState extends State<ProfileSetupPage> {
                               label: Text(customInterest),
                               selected: true,
                               showCheckmark: false,
-                              selectedColor: const Color(0xFFF4E3DB),
+                              selectedColor: colors.primaryContainer,
                               side: BorderSide.none,
                               shape: const StadiumBorder(),
-                              labelStyle: const TextStyle(
-                                color: AppColors.primaryDark,
+                              labelStyle: TextStyle(
+                                color: colors.onPrimaryContainer,
                                 fontWeight: FontWeight.w600,
                               ),
                               onSelected: (selected) {
@@ -557,9 +562,14 @@ class _ProfileSetupPageState extends State<ProfileSetupPage> {
                     child: TextField(
                       controller: _customInterest,
                       decoration: _editorInputDecoration(
+                        context,
                         'Custom interest',
                         hintText: 'e.g., Ultimate Frisbee',
                       ),
+                      style: Theme.of(
+                        context,
+                      ).textTheme.bodyLarge?.copyWith(color: colors.onSurface),
+                      cursorColor: colors.primary,
                       textCapitalization: TextCapitalization.words,
                       onSubmitted: (_) => _addCustomInterest(),
                     ),
@@ -577,122 +587,101 @@ class _ProfileSetupPageState extends State<ProfileSetupPage> {
             const Divider(height: 1),
             const SizedBox(height: 22),
 
-            // Vibe tags are optional context, kept deliberately quiet.
-            Container(
-              margin: const EdgeInsets.only(bottom: 16),
-              decoration: const BoxDecoration(
-                border: Border(
-                  bottom: BorderSide(color: AppColors.dividerLight),
-                ),
-              ),
-              child: Column(
-                children: [
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: const Icon(Icons.auto_awesome_outlined),
-                    title: const Text(
-                      'A little more context',
-                      style: TextStyle(fontWeight: FontWeight.w600),
-                    ),
-                    subtitle: Text(
-                      _vibeTags.isEmpty
-                          ? 'Optional vibe tags'
-                          : '${_vibeTags.length} vibe tags selected',
-                      style: TextStyle(color: AppColors.textSecondaryLight),
-                    ),
-                    trailing: Icon(
-                      _showVibeTags
-                          ? Icons.keyboard_arrow_up
-                          : Icons.keyboard_arrow_down,
-                    ),
-                    onTap: () {
-                      setState(() {
-                        _showVibeTags = !_showVibeTags;
-                      });
-                    },
+            // Optional context follows the same quiet, text-first structure
+            // as interests rather than introducing a separate visual system.
+            Row(
+              children: [
+                const _EditorialLabel('A little more context'),
+                const Spacer(),
+                Text(
+                  _vibeTags.isEmpty
+                      ? 'Optional'
+                      : '${_vibeTags.length} selected',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: colors.onSurfaceVariant,
                   ),
-                  if (_showVibeTags)
-                    Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Pick ${VibeTags.minRecommendedTags}-${VibeTags.maxRecommendedTags} tags that describe your personality and study style',
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                          const SizedBox(height: 16),
-                          ...VibeCategory.values.map((category) {
-                            final tags =
-                                VibeTags.tagsByCategory[category] ?? [];
-                            return Padding(
-                              padding: const EdgeInsets.only(bottom: 16),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: [
-                                      Text(
-                                        category.emoji,
-                                        style: const TextStyle(fontSize: 18),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Text(
-                                        category.label,
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 14,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Wrap(
-                                    spacing: 8,
-                                    runSpacing: 8,
-                                    children: tags.map((tag) {
-                                      final isSelected = _vibeTags.contains(
-                                        tag.id,
-                                      );
-                                      return FilterChip(
-                                        label: Text(tag.displayText),
-                                        selected: isSelected,
-                                        showCheckmark: false,
-                                        selectedColor: const Color(0xFFF4E3DB),
-                                        backgroundColor:
-                                            AppColors.surfaceVariantLight,
-                                        side: BorderSide.none,
-                                        shape: const StadiumBorder(),
-                                        labelStyle: TextStyle(
-                                          color: isSelected
-                                              ? AppColors.primaryDark
-                                              : AppColors.textPrimaryLight,
-                                          fontWeight: isSelected
-                                              ? FontWeight.w600
-                                              : FontWeight.w400,
-                                        ),
-                                        onSelected: (selected) {
-                                          setState(() {
-                                            if (selected) {
-                                              _vibeTags.add(tag.id);
-                                            } else {
-                                              _vibeTags.remove(tag.id);
-                                            }
-                                          });
-                                        },
-                                      );
-                                    }).toList(),
-                                  ),
-                                ],
-                              ),
-                            );
-                          }),
-                        ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 7),
+            TextButton.icon(
+              icon: Icon(
+                _showVibeTags
+                    ? Icons.keyboard_arrow_up_rounded
+                    : Icons.add_rounded,
+                size: 18,
+              ),
+              label: Text(_showVibeTags ? 'Hide context' : 'Add context'),
+              style: TextButton.styleFrom(foregroundColor: colors.primary),
+              onPressed: () => setState(() => _showVibeTags = !_showVibeTags),
+            ),
+            if (_showVibeTags)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Pick ${VibeTags.minRecommendedTags}-${VibeTags.maxRecommendedTags} tags that describe your personality and study style.',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: colors.onSurfaceVariant,
                       ),
                     ),
-                ],
+                    const SizedBox(height: 16),
+                    ...VibeCategory.values.map((category) {
+                      final tags = VibeTags.tagsByCategory[category] ?? [];
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              category.label,
+                              style: Theme.of(context).textTheme.titleSmall
+                                  ?.copyWith(fontWeight: FontWeight.w600),
+                            ),
+                            const SizedBox(height: 8),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: tags.map((tag) {
+                                final isSelected = _vibeTags.contains(tag.id);
+                                return FilterChip(
+                                  label: Text(tag.displayText),
+                                  selected: isSelected,
+                                  showCheckmark: false,
+                                  selectedColor: colors.primaryContainer,
+                                  backgroundColor:
+                                      colors.surfaceContainerHighest,
+                                  side: BorderSide.none,
+                                  shape: const StadiumBorder(),
+                                  labelStyle: TextStyle(
+                                    color: isSelected
+                                        ? colors.onPrimaryContainer
+                                        : colors.onSurface,
+                                    fontWeight: isSelected
+                                        ? FontWeight.w600
+                                        : FontWeight.w400,
+                                  ),
+                                  onSelected: (selected) {
+                                    setState(() {
+                                      if (selected) {
+                                        _vibeTags.add(tag.id);
+                                      } else {
+                                        _vibeTags.remove(tag.id);
+                                      }
+                                    });
+                                  },
+                                );
+                              }).toList(),
+                            ),
+                          ],
+                        ),
+                      );
+                    }),
+                  ],
+                ),
               ),
-            ),
           ],
         ),
       ),
@@ -700,23 +689,26 @@ class _ProfileSetupPageState extends State<ProfileSetupPage> {
   }
 }
 
-InputDecoration _editorInputDecoration(String label, {String? hintText}) {
-  const border = UnderlineInputBorder(
-    borderSide: BorderSide(color: AppColors.dividerLight),
+InputDecoration _editorInputDecoration(
+  BuildContext context,
+  String label, {
+  String? hintText,
+}) {
+  final colors = Theme.of(context).colorScheme;
+  final border = UnderlineInputBorder(
+    borderSide: BorderSide(color: colors.outline),
   );
   return InputDecoration(
+    filled: false,
     labelText: label,
     hintText: hintText,
     floatingLabelBehavior: FloatingLabelBehavior.always,
-    labelStyle: const TextStyle(
-      color: AppColors.textPrimaryLight,
-      fontSize: 13,
-    ),
-    hintStyle: const TextStyle(color: AppColors.textDisabledLight),
+    labelStyle: TextStyle(color: colors.onSurfaceVariant, fontSize: 13),
+    hintStyle: TextStyle(color: colors.onSurfaceVariant.withValues(alpha: .72)),
     contentPadding: const EdgeInsets.only(bottom: 8),
     enabledBorder: border,
-    focusedBorder: const UnderlineInputBorder(
-      borderSide: BorderSide(color: AppColors.primary, width: 1.5),
+    focusedBorder: UnderlineInputBorder(
+      borderSide: BorderSide(color: colors.primary, width: 1.5),
     ),
   );
 }
@@ -729,7 +721,7 @@ class _EditorialLabel extends StatelessWidget {
   Widget build(BuildContext context) => Text(
     label,
     style: Theme.of(context).textTheme.labelSmall?.copyWith(
-      color: AppColors.textSecondaryLight,
+      color: Theme.of(context).colorScheme.onSurfaceVariant,
       fontWeight: FontWeight.w600,
       letterSpacing: 1.1,
     ),
@@ -748,19 +740,22 @@ class _InterestChoiceChip extends StatelessWidget {
   final ValueChanged<bool> onSelected;
 
   @override
-  Widget build(BuildContext context) => FilterChip(
-    label: Text(label),
-    selected: selected,
-    showCheckmark: false,
-    selectedColor: const Color(0xFFF4E3DB),
-    backgroundColor: AppColors.surfaceVariantLight,
-    side: BorderSide.none,
-    shape: const StadiumBorder(),
-    pressElevation: 0,
-    labelStyle: TextStyle(
-      color: selected ? AppColors.primaryDark : AppColors.textPrimaryLight,
-      fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-    ),
-    onSelected: onSelected,
-  );
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return FilterChip(
+      label: Text(label),
+      selected: selected,
+      showCheckmark: false,
+      selectedColor: colors.primaryContainer,
+      backgroundColor: colors.surfaceContainerHighest,
+      side: BorderSide.none,
+      shape: const StadiumBorder(),
+      pressElevation: 0,
+      labelStyle: TextStyle(
+        color: selected ? colors.onPrimaryContainer : colors.onSurface,
+        fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+      ),
+      onSelected: onSelected,
+    );
+  }
 }

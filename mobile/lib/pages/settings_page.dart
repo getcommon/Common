@@ -7,6 +7,7 @@ import '../core/theme/app_colors.dart';
 import '../models/user_profile.dart';
 import '../services/auth_service.dart';
 import '../services/safety_service.dart';
+import '../services/theme_controller.dart';
 
 class SettingsPage extends StatelessWidget {
   const SettingsPage({super.key, required this.profile});
@@ -34,7 +35,7 @@ class SettingsPage extends StatelessWidget {
               Text(
                 'Controls for how Common protects your space.',
                 style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                  color: AppColors.textSecondaryLight,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
               ),
               const SizedBox(height: 34),
@@ -71,6 +72,10 @@ class SettingsPage extends StatelessWidget {
                   ),
                 ),
               const SizedBox(height: 38),
+              const _SettingsHeading('Appearance'),
+              const SizedBox(height: 10),
+              const _AppearanceSetting(),
+              const SizedBox(height: 38),
               const _SettingsHeading('Account'),
               const SizedBox(height: 10),
               TextButton.icon(
@@ -78,7 +83,9 @@ class SettingsPage extends StatelessWidget {
                 icon: const Icon(Icons.logout_rounded, size: 18),
                 label: const Text('Sign out'),
                 style: TextButton.styleFrom(
-                  foregroundColor: AppColors.textSecondaryLight,
+                  foregroundColor: Theme.of(
+                    context,
+                  ).colorScheme.onSurfaceVariant,
                   padding: const EdgeInsets.symmetric(
                     horizontal: 4,
                     vertical: 12,
@@ -118,6 +125,71 @@ class SettingsPage extends StatelessWidget {
       await AuthService.instance.signOut();
     }
   }
+}
+
+class _AppearanceSetting extends StatelessWidget {
+  const _AppearanceSetting();
+
+  static String _label(ThemeMode mode) => switch (mode) {
+    ThemeMode.system => 'System default',
+    ThemeMode.light => 'Light',
+    ThemeMode.dark => 'Dark',
+  };
+
+  @override
+  Widget build(BuildContext context) => ValueListenableBuilder<ThemeMode>(
+    valueListenable: ThemeController.instance,
+    builder: (context, themeMode, child) => ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: Icon(
+        themeMode == ThemeMode.dark
+            ? Icons.dark_mode_outlined
+            : Icons.light_mode_outlined,
+        color: AppColors.secondary,
+      ),
+      title: Text(
+        'Appearance',
+        style: Theme.of(
+          context,
+        ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+      ),
+      subtitle: Text(
+        _label(themeMode),
+        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+        ),
+      ),
+      trailing: PopupMenuButton<ThemeMode>(
+        tooltip: 'Change appearance',
+        onSelected: ThemeController.instance.setThemeMode,
+        itemBuilder: (context) => ThemeMode.values
+            .map(
+              (mode) => PopupMenuItem(
+                value: mode,
+                child: Row(
+                  children: [
+                    Icon(
+                      mode == ThemeMode.dark
+                          ? Icons.dark_mode_outlined
+                          : mode == ThemeMode.light
+                          ? Icons.light_mode_outlined
+                          : Icons.brightness_auto_outlined,
+                      size: 18,
+                    ),
+                    const SizedBox(width: 10),
+                    Text(_label(mode)),
+                  ],
+                ),
+              ),
+            )
+            .toList(),
+        child: const Padding(
+          padding: EdgeInsets.all(10),
+          child: Icon(Icons.chevron_right_rounded),
+        ),
+      ),
+    ),
+  );
 }
 
 class _SettingsHeading extends StatelessWidget {
@@ -161,7 +233,7 @@ class _SettingNote extends StatelessWidget {
             Text(
               message,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: AppColors.textSecondaryLight,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
                 height: 1.35,
               ),
             ),

@@ -130,7 +130,7 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
             Text(
               'Connected through Common',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: AppColors.textSecondaryLight,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
             ),
           ],
@@ -179,7 +179,7 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
                         Icon(
                           Icons.chat_bubble_outline,
                           size: 38,
-                          color: AppColors.textSecondaryLight,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
                         ),
                         const SizedBox(height: 16),
                         Text(
@@ -191,7 +191,11 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
                           'Try a simple hello, or ask about something you have in common.',
                           textAlign: TextAlign.center,
                           style: Theme.of(context).textTheme.bodyMedium
-                              ?.copyWith(color: AppColors.textSecondaryLight),
+                              ?.copyWith(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurfaceVariant,
+                              ),
                         ),
                       ],
                     ),
@@ -416,6 +420,7 @@ class _MessageBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     return Align(
       alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
@@ -426,7 +431,7 @@ class _MessageBubble extends StatelessWidget {
           maxWidth: MediaQuery.of(context).size.width * 0.75,
         ),
         decoration: BoxDecoration(
-          color: isMe ? AppColors.primary : AppColors.surfaceVariantLight,
+          color: isMe ? colors.primary : colors.surfaceContainerHighest,
           borderRadius: BorderRadius.only(
             topLeft: const Radius.circular(18),
             topRight: const Radius.circular(18),
@@ -440,7 +445,7 @@ class _MessageBubble extends StatelessWidget {
             Text(
               message.text,
               style: TextStyle(
-                color: isMe ? Colors.white : AppColors.textPrimaryLight,
+                color: isMe ? colors.onPrimary : colors.onSurface,
                 fontSize: 15,
               ),
             ),
@@ -448,7 +453,9 @@ class _MessageBubble extends StatelessWidget {
             Text(
               _formatTimestamp(message.timestamp),
               style: TextStyle(
-                color: isMe ? Colors.white70 : AppColors.textSecondaryLight,
+                color: isMe
+                    ? colors.onPrimary.withValues(alpha: .72)
+                    : colors.onSurfaceVariant,
                 fontSize: 11,
               ),
             ),
@@ -479,13 +486,14 @@ class _MessageInput extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
       decoration: BoxDecoration(
-        color: AppColors.surfaceLight,
+        color: colors.surface,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
+            color: Colors.black.withValues(alpha: .16),
             blurRadius: 5,
             offset: const Offset(0, -2),
           ),
@@ -498,19 +506,26 @@ class _MessageInput extends StatelessWidget {
               child: TextField(
                 controller: controller,
                 decoration: InputDecoration(
+                  filled: true,
                   hintText: 'Write a message',
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(24),
                     borderSide: BorderSide.none,
                   ),
-                  filled: true,
-                  fillColor: AppColors.surfaceVariantLight,
+                  fillColor: colors.surfaceContainerHighest,
+                  hintStyle: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: colors.onSurfaceVariant,
+                  ),
                   contentPadding: const EdgeInsets.symmetric(
                     horizontal: 20,
                     vertical: 10,
                   ),
                 ),
                 maxLines: null,
+                style: Theme.of(
+                  context,
+                ).textTheme.bodyLarge?.copyWith(color: colors.onSurface),
+                cursorColor: colors.primary,
                 textCapitalization: TextCapitalization.sentences,
                 onSubmitted: (_) => onSend(),
               ),
