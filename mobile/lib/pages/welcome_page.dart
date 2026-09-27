@@ -208,9 +208,13 @@ class _WelcomePageState extends State<WelcomePage>
                         _TermsAndPrivacy(
                           isDark: isDark,
                           onTermsTap: () =>
-                              _launchUrl('https://commongrounds.app/terms'),
+                              _launchUrl(
+                                'https://blue4-commongrounds.web.app/terms.html',
+                              ),
                           onPrivacyTap: () =>
-                              _launchUrl('https://commongrounds.app/privacy'),
+                              _launchUrl(
+                                'https://blue4-commongrounds.web.app/privacy.html',
+                              ),
                         ),
                       ],
                     ),

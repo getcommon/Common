@@ -96,11 +96,9 @@ service cloud.firestore {
         exists(/databases/$(database)/documents/conversations/$(resource.data.conversationId)) &&
         request.auth.uid in get(/databases/$(database)/documents/conversations/$(resource.data.conversationId)).data.participantIds;
 
-      // Allow creating if you're the sender and a participant in the conversation
-      allow create: if isSignedIn() &&
-        request.resource.data.senderId == request.auth.uid &&
-        exists(/databases/$(database)/documents/conversations/$(request.resource.data.conversationId)) &&
-        request.auth.uid in get(/databases/$(database)/documents/conversations/$(request.resource.data.conversationId)).data.participantIds;
+      // The sendMessage callable validates membership and safety screening
+      // before storing a message. Direct client writes cannot bypass it.
+      allow create: if false;
 
       // Don't allow updates or deletes
       allow update: if false;

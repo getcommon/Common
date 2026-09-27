@@ -103,6 +103,12 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
       }
     } catch (e) {
       if (mounted) {
+        // A server-side safety screen can reject a message. Preserve the text
+        // so the member can revise it instead of having to type it again.
+        _messageController.text = text;
+        _messageController.selection = TextSelection.collapsed(
+          offset: text.length,
+        );
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Failed to send message: $e'),

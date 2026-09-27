@@ -2,6 +2,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../core/theme/app_colors.dart';
 import '../models/user_profile.dart';
@@ -75,6 +76,23 @@ class SettingsPage extends StatelessWidget {
               const _SettingsHeading('Appearance'),
               const SizedBox(height: 10),
               const _AppearanceSetting(),
+              const SizedBox(height: 38),
+              const _SettingsHeading('Support'),
+              const SizedBox(height: 10),
+              TextButton.icon(
+                onPressed: () => launchUrl(
+                  Uri(scheme: 'mailto', path: 'commonask3@gmail.com'),
+                ),
+                icon: const Icon(Icons.mail_outline, size: 18),
+                label: const Text('Email Common support'),
+                style: TextButton.styleFrom(
+                  foregroundColor: Theme.of(context).colorScheme.onSurface,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 4,
+                    vertical: 12,
+                  ),
+                ),
+              ),
               const SizedBox(height: 38),
               const _SettingsHeading('Account'),
               const SizedBox(height: 10),

@@ -7,6 +7,7 @@ import {
   discoveryEligibility,
   selectedSearchRadiusKm,
 } from './discovery_eligibility';
+import { moderationRejection } from './content_moderation';
 
 // Initialize Firebase Admin
 admin.initializeApp();
@@ -306,6 +307,64 @@ export const submitReport = onCall({ region: 'us-central1' }, async (request) =>
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
   });
   return { reportId: report.id };
+});
+
+/**
+ * Stores a chat message only after enforcing participant access and the
+ * server-side safety screen. Direct client writes are denied by Firestore
+ * rules, so this boundary cannot be bypassed from a modified app.
+ */
+export const sendMessage = onCall({ region: 'us-central1' }, async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'Sign in to send a message.');
+  }
+  const conversationId = request.data?.conversationId;
+  const text = request.data?.text;
+  if (typeof conversationId !== 'string' || !conversationId ||
+      typeof text !== 'string' || !text.trim() || text.trim().length > 1000) {
+    throw new HttpsError('invalid-argument', 'Send a message between 1 and 1,000 characters.');
+  }
+  const rejection = moderationRejection(text.trim());
+  if (rejection) {
+    throw new HttpsError('failed-precondition', rejection);
+  }
+
+  const db = admin.firestore();
+  const conversationRef = db.collection('conversations').doc(conversationId);
+  const counterRef = conversationRef.collection('_counters').doc('messages');
+  const messageRef = db.collection('messages').doc();
+  await db.runTransaction(async (transaction) => {
+    const [conversation, counter] = await Promise.all([
+      transaction.get(conversationRef),
+      transaction.get(counterRef),
+    ]);
+    if (!conversation.exists || !conversation.data()?.participantIds?.includes(request.auth!.uid)) {
+      throw new HttpsError('permission-denied', 'You are not part of this conversation.');
+    }
+    const sequence = (counter.data()?.sequence ?? 0) + 1;
+    const unreadCount = { ...(conversation.data()?.unreadCount ?? {}) };
+    for (const participantId of conversation.data()!.participantIds) {
+      if (participantId !== request.auth!.uid) {
+        unreadCount[participantId] = (unreadCount[participantId] ?? 0) + 1;
+      }
+    }
+    transaction.set(counterRef, { sequence }, { merge: true });
+    transaction.set(messageRef, {
+      conversationId,
+      senderId: request.auth!.uid,
+      text: text.trim(),
+      timestamp: admin.firestore.FieldValue.serverTimestamp(),
+      sequence,
+      isRead: false,
+    });
+    transaction.update(conversationRef, {
+      lastMessage: text.trim(),
+      lastMessageTime: admin.firestore.FieldValue.serverTimestamp(),
+      lastMessageSenderId: request.auth!.uid,
+      unreadCount,
+    });
+  });
+  return { messageId: messageRef.id };
 });
 
 /**

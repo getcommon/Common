@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/foundation.dart';
 import '../models/chat_models.dart';
 
@@ -79,66 +80,9 @@ class ChatService {
     required String text,
   }) async {
     try {
-      // Atomically increment sequence counter for this conversation using a transaction
-      // This ensures messages sent simultaneously get unique, ordered sequence numbers
-      final counterRef = _db
-          .collection('conversations')
-          .doc(conversationId)
-          .collection('_counters')
-          .doc('messages');
-
-      final nextSequence = await _db.runTransaction<int>((transaction) async {
-        final counterDoc = await transaction.get(counterRef);
-        int sequence;
-        if (counterDoc.exists) {
-          sequence = (counterDoc.data()?['sequence'] as int?) ?? 0;
-          sequence++;
-          transaction.update(counterRef, {'sequence': sequence});
-        } else {
-          sequence = 1;
-          transaction.set(counterRef, {'sequence': sequence});
-        }
-        return sequence;
-      });
-
-      // Use Firebase server timestamp (Unix time from server, NOT device time)
-      // Add sequence number to ensure correct ordering when timestamps are identical
-      await _db.collection('messages').add({
-        'conversationId': conversationId,
-        'senderId': senderId,
-        'text': text,
-        'timestamp':
-            FieldValue.serverTimestamp(), // Server Unix timestamp, not device time
-        'sequence':
-            nextSequence, // Sequence number for tie-breaking (atomically assigned)
-        'isRead': false,
-      });
-
-      // Get conversation to update unread counts
-      final convDoc = await _db
-          .collection('conversations')
-          .doc(conversationId)
-          .get();
-      if (!convDoc.exists) return;
-
-      final conv = Conversation.fromMap(convDoc.id, convDoc.data()!);
-      final newUnreadCount = Map<String, int>.from(conv.unreadCount);
-
-      // Increment unread count for all participants except sender
-      for (final participantId in conv.participantIds) {
-        if (participantId != senderId) {
-          newUnreadCount[participantId] =
-              (newUnreadCount[participantId] ?? 0) + 1;
-        }
-      }
-
-      // Update conversation with last message info
-      await _db.collection('conversations').doc(conversationId).update({
-        'lastMessage': text,
-        'lastMessageTime': FieldValue.serverTimestamp(),
-        'lastMessageSenderId': senderId,
-        'unreadCount': newUnreadCount,
-      });
+      await FirebaseFunctions.instance
+          .httpsCallable('sendMessage')
+          .call<void>({'conversationId': conversationId, 'text': text});
     } catch (e) {
       debugPrint('Error in sendMessage: $e');
       rethrow;
