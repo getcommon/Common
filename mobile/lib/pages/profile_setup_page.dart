@@ -32,6 +32,17 @@ class _ProfileSetupPageState extends State<ProfileSetupPage> {
   bool _showInterestPicker = false;
   File? _newProfileImage; // New image selected from gallery/camera
   String? _profileImageUrl; // Current image URL from profile
+  late List<_EditablePhotoMoment> _photoMoments;
+
+  static const _momentPrompts = [
+    'A ritual I protect',
+    'Something I make',
+    'The view I chase',
+    'My people',
+    'My happy place',
+    'A small adventure',
+    'My ideal ordinary day',
+  ];
 
   // Interest groups begin collapsed to keep the editor calm and scannable.
   final Map<InterestCategory, bool> _expandedCategories = {
@@ -47,6 +58,15 @@ class _ProfileSetupPageState extends State<ProfileSetupPage> {
     _interests = widget.profile.interests.toSet();
     _vibeTags = widget.profile.vibeTags.toSet();
     _profileImageUrl = widget.profile.photoUrl;
+    _photoMoments = widget.profile.photoMoments
+        .map(
+          (moment) => _EditablePhotoMoment(
+            photoUrl: moment.photoUrl,
+            prompt: moment.prompt,
+            isFeatured: moment.photoUrl == widget.profile.featuredPhotoUrl,
+          ),
+        )
+        .toList();
   }
 
   @override
@@ -90,7 +110,8 @@ class _ProfileSetupPageState extends State<ProfileSetupPage> {
       final storageRef = FirebaseStorage.instance
           .ref()
           .child('profile_pictures')
-          .child('${user.uid}.jpg');
+          .child(user.uid)
+          .child('primary.jpg');
 
       // Upload the file
       final uploadTask = await storageRef.putFile(imageFile);
@@ -106,6 +127,104 @@ class _ProfileSetupPageState extends State<ProfileSetupPage> {
       }
       return null;
     }
+  }
+
+  Future<void> _addPlaylistPhotos() async {
+    final remaining = ProfilePhotoMoment.maximumCount - _photoMoments.length;
+    if (remaining <= 0) return;
+    try {
+      final files = await ImagePicker().pickMultiImage(
+        maxWidth: 1440,
+        maxHeight: 1440,
+        imageQuality: 85,
+      );
+      if (files.isEmpty || !mounted) return;
+      setState(() {
+        _photoMoments.addAll(
+          files
+              .take(remaining)
+              .map((file) => _EditablePhotoMoment(newFile: File(file.path))),
+        );
+      });
+      if (files.length > remaining && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('A visual playlist can have up to 6 photos.'),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error choosing photos: $e')));
+      }
+    }
+  }
+
+  Future<String?> _uploadPlaylistPhoto(File imageFile, int index) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return null;
+    final storageRef = FirebaseStorage.instance
+        .ref()
+        .child('profile_playlists')
+        .child(user.uid)
+        .child('$index.jpg');
+    final upload = await storageRef.putFile(imageFile);
+    return upload.ref.getDownloadURL();
+  }
+
+  Future<void> _chooseMomentPrompt(int index) async {
+    final selected = await showModalBottomSheet<String?>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            const ListTile(
+              title: Text('Add an optional prompt'),
+              subtitle: Text(
+                'It gives someone a natural way to start a conversation.',
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.remove_circle_outline),
+              title: const Text('No prompt'),
+              onTap: () => Navigator.pop(context, ''),
+            ),
+            for (final prompt in _momentPrompts)
+              ListTile(
+                title: Text(prompt),
+                trailing: _photoMoments[index].prompt == prompt
+                    ? const Icon(Icons.check, color: AppColors.primary)
+                    : null,
+                onTap: () => Navigator.pop(context, prompt),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (selected == null || !mounted) return;
+    setState(() {
+      _photoMoments[index] = _photoMoments[index].copyWith(
+        prompt: selected.isEmpty ? null : selected,
+        clearPrompt: selected.isEmpty,
+      );
+    });
+  }
+
+  void _setFeaturedMoment(int? featuredIndex) {
+    setState(() {
+      _photoMoments = [
+        for (var index = 0; index < _photoMoments.length; index++)
+          _photoMoments[index].copyWith(isFeatured: index == featuredIndex),
+      ];
+    });
+  }
+
+  void _toggleFeaturedMoment(int index) {
+    _setFeaturedMoment(_photoMoments[index].isFeatured ? null : index);
   }
 
   void _showImageSourceDialog() {
@@ -188,12 +307,28 @@ class _ProfileSetupPageState extends State<ProfileSetupPage> {
       if (_newProfileImage != null) {
         newPhotoUrl = await _uploadProfileImage(_newProfileImage!);
       }
+      final moments = <ProfilePhotoMoment>[];
+      String? featuredPhotoUrl;
+      for (var index = 0; index < _photoMoments.length; index++) {
+        final moment = _photoMoments[index];
+        final photoUrl = moment.newFile == null
+            ? moment.photoUrl
+            : await _uploadPlaylistPhoto(moment.newFile!, index);
+        if (photoUrl != null && photoUrl.isNotEmpty) {
+          moments.add(
+            ProfilePhotoMoment(photoUrl: photoUrl, prompt: moment.prompt),
+          );
+          if (moment.isFeatured) featuredPhotoUrl = photoUrl;
+        }
+      }
 
       final name = _name.text.trim();
       final p = UserProfile(
         uid: widget.profile.uid,
         displayName: name.isEmpty ? widget.profile.displayName : name,
         photoUrl: newPhotoUrl,
+        photoMoments: moments,
+        featuredPhotoUrl: featuredPhotoUrl,
         bio: _bio.text.trim().isEmpty ? null : _bio.text.trim(),
         // Preserve legacy private fields without presenting them publicly.
         classYear: widget.profile.classYear,
@@ -228,10 +363,18 @@ class _ProfileSetupPageState extends State<ProfileSetupPage> {
       // Navigate back to previous screen (best practice for edit screens)
       Navigator.pop(context);
     } catch (e) {
-      setState(() => _error = e.toString());
+      setState(() => _error = _saveErrorMessage(e));
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+  }
+
+  String _saveErrorMessage(Object error) {
+    if (error is FirebaseException && error.code == 'object-not-found') {
+      return 'Photo storage has not been set up for Common Grounds yet. '
+          'Enable Cloud Storage in the Firebase console, then try again.';
+    }
+    return error.toString();
   }
 
   @override
@@ -335,6 +478,192 @@ class _ProfileSetupPageState extends State<ProfileSetupPage> {
             const SizedBox(height: 24),
             const Divider(height: 1),
             const SizedBox(height: 22),
+            Row(
+              children: [
+                const _EditorialLabel('Your visual playlist'),
+                const Spacer(),
+                Text(
+                  '${_photoMoments.length} of ${ProfilePhotoMoment.maximumCount}',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: colors.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 7),
+            Text(
+              'Add up to six favorite photos. Prompts are optional, and help make a first hello easier.',
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: colors.onSurfaceVariant),
+            ),
+            const SizedBox(height: 13),
+            if (_photoMoments.isNotEmpty)
+              SizedBox(
+                height: 196,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: _photoMoments.length,
+                  separatorBuilder: (_, _) => const SizedBox(width: 10),
+                  itemBuilder: (context, index) {
+                    final moment = _photoMoments[index];
+                    return SizedBox(
+                      width: 142,
+                      child: Stack(
+                        children: [
+                          Positioned.fill(
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(16),
+                              child: Stack(
+                                fit: StackFit.expand,
+                                children: [
+                                  if (moment.newFile != null)
+                                    Image.file(
+                                      moment.newFile!,
+                                      fit: BoxFit.cover,
+                                    )
+                                  else if (moment.photoUrl != null)
+                                    Image.network(
+                                      moment.photoUrl!,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (_, _, _) =>
+                                          const ColoredBox(
+                                            color: AppColors.secondaryLight,
+                                          ),
+                                    ),
+                                  const DecoratedBox(
+                                    decoration: BoxDecoration(
+                                      gradient: LinearGradient(
+                                        begin: Alignment.topCenter,
+                                        end: Alignment.bottomCenter,
+                                        colors: [
+                                          Colors.transparent,
+                                          Color(0x990D0908),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                  Positioned(
+                                    left: 10,
+                                    right: 8,
+                                    bottom: 9,
+                                    child: Text(
+                                      moment.prompt ?? 'Optional prompt',
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          Positioned(
+                            top: 5,
+                            left: 5,
+                            child: Semantics(
+                              button: true,
+                              selected: moment.isFeatured,
+                              label: moment.isFeatured
+                                  ? 'Photo ${index + 1} is the Discover front photo. Tap to clear it.'
+                                  : 'Use photo ${index + 1} as the Discover front photo',
+                              child: Material(
+                                color: Colors.transparent,
+                                shape: const CircleBorder(),
+                                child: InkWell(
+                                  customBorder: const CircleBorder(),
+                                  onTap: () => _toggleFeaturedMoment(index),
+                                  child: CircleAvatar(
+                                    radius: 12,
+                                    backgroundColor: moment.isFeatured
+                                        ? AppColors.primary
+                                        : const Color(0xB3000000),
+                                    child: Text(
+                                      '${index + 1}',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          Positioned(
+                            right: 2,
+                            top: 2,
+                            child: PopupMenuButton<String>(
+                              tooltip: 'Edit photo ${index + 1}',
+                              icon: const Icon(
+                                Icons.more_horiz,
+                                color: Colors.white,
+                              ),
+                              onSelected: (value) {
+                                if (value == 'prompt') {
+                                  _chooseMomentPrompt(index);
+                                } else {
+                                  setState(() => _photoMoments.removeAt(index));
+                                }
+                              },
+                              itemBuilder: (_) => [
+                                PopupMenuItem(
+                                  value: 'prompt',
+                                  child: const Text('Choose prompt'),
+                                ),
+                                PopupMenuItem(
+                                  value: 'remove',
+                                  child: const Text('Remove photo'),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+            if (_photoMoments.isNotEmpty) const SizedBox(height: 10),
+            if (_photoMoments.isNotEmpty)
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      _photoMoments.any((moment) => moment.isFeatured)
+                          ? 'The highlighted number is your Discover front photo.'
+                          : 'Tap a photo number to use it in Discover; no selection uses your profile photo.',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: colors.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                  if (_photoMoments.any((moment) => moment.isFeatured))
+                    TextButton(
+                      onPressed: () => _setFeaturedMoment(null),
+                      child: const Text('Clear'),
+                    ),
+                ],
+              ),
+            if (_photoMoments.length < ProfilePhotoMoment.maximumCount)
+              TextButton.icon(
+                onPressed: _addPlaylistPhotos,
+                icon: const Icon(Icons.add_photo_alternate_outlined),
+                label: Text(
+                  _photoMoments.isEmpty
+                      ? 'Choose up to 6 photos'
+                      : 'Add more photos',
+                ),
+                style: TextButton.styleFrom(foregroundColor: AppColors.primary),
+              ),
+            const SizedBox(height: 24),
+            const Divider(height: 1),
+            const SizedBox(height: 22),
             const _EditorialLabel('The essentials'),
             const SizedBox(height: 13),
             TextField(
@@ -359,17 +688,37 @@ class _ProfileSetupPageState extends State<ProfileSetupPage> {
             const SizedBox(height: 24),
             const Divider(height: 1),
             const SizedBox(height: 22),
-            Row(
-              children: [
-                const _EditorialLabel('Into lately'),
-                const Spacer(),
-                Text(
-                  '${_interests.length} selected',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: colors.onSurfaceVariant,
+            Semantics(
+              button: true,
+              expanded: _showInterestPicker,
+              label: 'Interests, ${_interests.length} selected',
+              child: InkWell(
+                borderRadius: BorderRadius.circular(8),
+                onTap: () =>
+                    setState(() => _showInterestPicker = !_showInterestPicker),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  child: Row(
+                    children: [
+                      const _EditorialLabel('Interests'),
+                      const Spacer(),
+                      Text(
+                        '${_interests.length} selected',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: colors.onSurfaceVariant,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Icon(
+                        _showInterestPicker
+                            ? Icons.keyboard_arrow_up_rounded
+                            : Icons.keyboard_arrow_down_rounded,
+                        color: colors.onSurfaceVariant,
+                      ),
+                    ],
                   ),
                 ),
-              ],
+              ),
             ),
             const SizedBox(height: 11),
             if (_interests.length < 5)
@@ -407,20 +756,6 @@ class _ProfileSetupPageState extends State<ProfileSetupPage> {
                     .toList(),
               ),
             const SizedBox(height: 7),
-            TextButton.icon(
-              icon: Icon(
-                _showInterestPicker
-                    ? Icons.keyboard_arrow_up_rounded
-                    : Icons.add_rounded,
-                size: 18,
-              ),
-              label: Text(
-                _showInterestPicker ? 'Hide interests' : 'Add interest',
-              ),
-              style: TextButton.styleFrom(foregroundColor: AppColors.primary),
-              onPressed: () =>
-                  setState(() => _showInterestPicker = !_showInterestPicker),
-            ),
             if (_showInterestPicker) ...[
               const SizedBox(height: 8),
               // Categorized interest selection stays tucked away until wanted.
@@ -758,4 +1093,29 @@ class _InterestChoiceChip extends StatelessWidget {
       onSelected: onSelected,
     );
   }
+}
+
+class _EditablePhotoMoment {
+  const _EditablePhotoMoment({
+    this.photoUrl,
+    this.newFile,
+    this.prompt,
+    this.isFeatured = false,
+  });
+
+  final String? photoUrl;
+  final File? newFile;
+  final String? prompt;
+  final bool isFeatured;
+
+  _EditablePhotoMoment copyWith({
+    String? prompt,
+    bool clearPrompt = false,
+    bool? isFeatured,
+  }) => _EditablePhotoMoment(
+    photoUrl: photoUrl,
+    newFile: newFile,
+    prompt: clearPrompt ? null : prompt ?? this.prompt,
+    isFeatured: isFeatured ?? this.isFeatured,
+  );
 }

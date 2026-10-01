@@ -1,0 +1,25 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    // A member may manage only their own profile image.
+    match /profile_pictures/{userId}/primary.jpg {
+      allow read: if request.auth != null;
+      allow create, update: if request.auth != null
+          && request.auth.uid == userId
+          && request.resource.size < 10 * 1024 * 1024
+          && request.resource.contentType.matches('image/.*');
+      allow delete: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // The visual playlist uses the same ownership and image-only limits.
+    match /profile_playlists/{userId}/{photoName} {
+      allow read: if request.auth != null;
+      allow create, update: if request.auth != null
+          && request.auth.uid == userId
+          && request.resource.size < 10 * 1024 * 1024
+          && request.resource.contentType.matches('image/.*');
+      allow delete: if request.auth != null && request.auth.uid == userId;
+    }
+  }
+}

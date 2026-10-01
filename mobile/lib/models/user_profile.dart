@@ -8,6 +8,13 @@ class UserProfile {
   final String uid;
   final String? displayName;
   final String? photoUrl;
+
+  /// Six optional profile moments that give people a more personal first look.
+  final List<ProfilePhotoMoment> photoMoments;
+
+  /// An optional playlist image used as the lead photo in Discover.
+  /// When unset, [photoUrl] remains the lead image.
+  final String? featuredPhotoUrl;
   final String? bio;
   final String? classYear; // e.g., "2026"
   final String? major; // e.g., "CS"
@@ -25,6 +32,8 @@ class UserProfile {
     required this.uid,
     this.displayName,
     this.photoUrl,
+    this.photoMoments = const [],
+    this.featuredPhotoUrl,
     this.bio,
     this.classYear,
     this.major,
@@ -39,6 +48,8 @@ class UserProfile {
 
   bool get isComplete =>
       interests.isNotEmpty; // tweak your own "completion" rule
+
+  String? get discoverPhotoUrl => featuredPhotoUrl ?? photoUrl;
 
   /// Gets the effective search radius, using user preference or default
   double get effectiveSearchRadiusKm {
@@ -106,6 +117,8 @@ class UserProfile {
     'uid': uid,
     'displayName': displayName,
     'photoUrl': photoUrl,
+    'photoMoments': photoMoments.map((moment) => moment.toMap()).toList(),
+    'featuredPhotoUrl': featuredPhotoUrl,
     'bio': bio,
     'classYear': classYear,
     'major': major,
@@ -130,6 +143,15 @@ class UserProfile {
       uid: uid,
       displayName: m['displayName'] as String?,
       photoUrl: m['photoUrl'] as String?,
+      photoMoments: (m['photoMoments'] as List? ?? const [])
+          .whereType<Map>()
+          .map(
+            (moment) =>
+                ProfilePhotoMoment.fromMap(Map<String, dynamic>.from(moment)),
+          )
+          .take(ProfilePhotoMoment.maximumCount)
+          .toList(),
+      featuredPhotoUrl: m['featuredPhotoUrl'] as String?,
       bio: m['bio'] as String?,
       classYear: m['classYear'] as String?,
       major: m['major'] as String?,
@@ -147,6 +169,28 @@ class UserProfile {
       searchRadiusKm: m['searchRadiusKm'] as double?,
       hasCompletedDiscoverySetup:
           m['hasCompletedDiscoverySetup'] as bool? ?? true,
+    );
+  }
+}
+
+/// A single image in a member's optional six-photo visual playlist.
+class ProfilePhotoMoment {
+  static const int maximumCount = 6;
+
+  const ProfilePhotoMoment({required this.photoUrl, this.prompt});
+
+  final String photoUrl;
+  final String? prompt;
+
+  Map<String, dynamic> toMap() => {
+    'photoUrl': photoUrl,
+    if (prompt != null && prompt!.isNotEmpty) 'prompt': prompt,
+  };
+
+  factory ProfilePhotoMoment.fromMap(Map<String, dynamic> map) {
+    return ProfilePhotoMoment(
+      photoUrl: map['photoUrl'] as String? ?? '',
+      prompt: map['prompt'] as String?,
     );
   }
 }

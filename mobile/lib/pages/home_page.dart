@@ -13,6 +13,7 @@ import '../services/profile_service.dart';
 import '../services/proximity_service.dart';
 import '../services/safety_service.dart';
 import '../services/wave_service.dart';
+import '../widgets/photo_playlist.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key, this.onNavigateToTab});
@@ -359,6 +360,10 @@ class _PublicProfile extends StatelessWidget {
             color: AppColors.textPrimaryLight,
           ),
         ),
+        if (person.photoMoments.isNotEmpty) ...[
+          const SizedBox(height: 26),
+          PhotoPlaylist(moments: person.photoMoments),
+        ],
         const SizedBox(height: 26),
         Text(
           'A few things Eren is into',
@@ -435,7 +440,7 @@ class _ProfilePhoto extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final imageUrl = profile.profile.photoUrl;
+    final imageUrl = profile.profile.discoverPhotoUrl;
     if (imageUrl == null || imageUrl.isEmpty) {
       return Image.asset(
         'assets/images/eren_editorial_portrait.png',

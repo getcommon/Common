@@ -9,6 +9,13 @@ void main() {
         'uid': 'user1',
         'displayName': 'Alice',
         'photoUrl': 'https://example.com/photo.jpg',
+        'photoMoments': [
+          {
+            'photoUrl': 'https://example.com/moment.jpg',
+            'prompt': 'My happy place',
+          },
+        ],
+        'featuredPhotoUrl': 'https://example.com/moment.jpg',
         'bio': 'Hello world',
         'classYear': '2026',
         'major': 'Computer Science',
@@ -24,6 +31,9 @@ void main() {
       expect(profile.uid, 'user1');
       expect(profile.displayName, 'Alice');
       expect(profile.photoUrl, 'https://example.com/photo.jpg');
+      expect(profile.photoMoments, hasLength(1));
+      expect(profile.photoMoments.single.prompt, 'My happy place');
+      expect(profile.discoverPhotoUrl, 'https://example.com/moment.jpg');
       expect(profile.bio, 'Hello world');
       expect(profile.classYear, '2026');
       expect(profile.major, 'Computer Science');
@@ -165,6 +175,30 @@ void main() {
         expect(profile.effectiveSearchRadiusKm, kMaxSearchRadiusKm);
       },
     );
+  });
+
+  group('ProfilePhotoMoment', () {
+    test('profile moments are capped at six and prompts are optional', () {
+      final profile = UserProfile.fromMap({
+        'uid': 'user1',
+        'photoMoments': List.generate(
+          7,
+          (index) => {'photoUrl': 'photo-$index'},
+        ),
+      });
+
+      expect(profile.photoMoments, hasLength(ProfilePhotoMoment.maximumCount));
+      expect(profile.photoMoments.first.prompt, isNull);
+    });
+  });
+
+  test('uses the profile photo as the Discover fallback', () {
+    final profile = UserProfile.fromMap({
+      'uid': 'user1',
+      'photoUrl': 'https://example.com/profile.jpg',
+    });
+
+    expect(profile.discoverPhotoUrl, 'https://example.com/profile.jpg');
   });
 
   group('UserLocation.fromMap', () {

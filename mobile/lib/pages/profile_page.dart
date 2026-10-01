@@ -9,6 +9,7 @@ import '../models/user_profile.dart';
 import '../services/location_service.dart';
 import '../services/profile_service.dart';
 import '../widgets/search_radius_settings.dart';
+import '../widgets/photo_playlist.dart';
 import 'profile_setup_page.dart';
 import 'settings_page.dart';
 
@@ -72,6 +73,15 @@ class _ProfileContent extends StatelessWidget {
                   ],
                   const SizedBox(height: 24),
                   const Divider(height: 1),
+                  if (profile.photoMoments.isNotEmpty) ...[
+                    const SizedBox(height: 22),
+                    PhotoPlaylist(
+                      moments: profile.photoMoments,
+                      title: 'My visual playlist',
+                    ),
+                    const SizedBox(height: 24),
+                    const Divider(height: 1),
+                  ],
                   const SizedBox(height: 22),
                   const _SectionHeading('Into lately'),
                   const SizedBox(height: 11),

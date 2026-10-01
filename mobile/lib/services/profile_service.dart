@@ -65,6 +65,7 @@ class ProfileService {
         'uid': uid,
         'displayName': displayName,
         'photoUrl': photoUrl,
+        'photoMoments': <Map<String, dynamic>>[],
         'bio': null,
         'classYear': null,
         'major': null,

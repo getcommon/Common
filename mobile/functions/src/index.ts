@@ -400,10 +400,14 @@ export const deleteUserAccount = onCall({ region: 'us-central1' }, async (reques
   await db.collection('users').doc(userId).delete();
 
   try {
-    await admin.storage().bucket().file(`profile_pictures/${userId}.jpg`).delete();
+    await admin.storage().bucket().file(`profile_pictures/${userId}/primary.jpg`).delete();
   } catch (error: any) {
     if (error?.code !== 404) throw error;
   }
+  const [playlistFiles] = await admin.storage().bucket().getFiles({
+    prefix: `profile_playlists/${userId}/`,
+  });
+  await Promise.all(playlistFiles.map((file) => file.delete()));
   await admin.auth().deleteUser(userId);
   return { deleted: true };
 });
