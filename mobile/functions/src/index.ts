@@ -9,6 +9,7 @@ import {
 } from './discovery_eligibility';
 import { geohashRangesForRadius } from './geo_query';
 import { publicDiscoverProfile, type PublicDiscoverProfile } from './discovery_payload';
+import { discoveryRankingVersion } from './discovery_ranking';
 import { moderationRejection } from './content_moderation';
 
 // Initialize Firebase Admin
@@ -59,6 +60,7 @@ interface ProximityMatch {
 
 interface FindMatchesResponse {
   matches: ProximityMatch[];
+  rankingVersion: string;
   totalProcessed: number;
   executionTimeMs: number;
 }
@@ -518,6 +520,7 @@ export const findNearbyMatches = onCall(
       if (!hasFreshPresence(currentUserProfile.location)) {
         return {
           matches: [],
+          rankingVersion: discoveryRankingVersion,
           totalProcessed: 0,
           executionTimeMs: Date.now() - startTime
         };
@@ -526,6 +529,7 @@ export const findNearbyMatches = onCall(
       if (currentUserProfile.interests.length === 0) {
         return {
           matches: [],
+          rankingVersion: discoveryRankingVersion,
           totalProcessed: 0,
           executionTimeMs: Date.now() - startTime
         };
@@ -629,6 +633,7 @@ export const findNearbyMatches = onCall(
 
       return {
         matches: limitedMatches,
+        rankingVersion: discoveryRankingVersion,
         totalProcessed,
         executionTimeMs: Date.now() - startTime
       };

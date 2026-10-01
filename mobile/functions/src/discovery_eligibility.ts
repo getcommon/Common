@@ -1,4 +1,8 @@
 import { hasFreshPresence, type PresenceState } from './presence';
+import {
+  calculateDiscoveryScore,
+  discoveryRankingVersion,
+} from './discovery_ranking';
 
 export const defaultSearchRadiusKm = 0.8;
 export const minSearchRadiusKm = 0.16;
@@ -17,6 +21,7 @@ export interface DiscoverySafety {
 
 export interface DiscoveryProfile {
   interests?: string[];
+  vibeTags?: string[];
   location?: DiscoveryLocation;
   searchRadiusKm?: number;
   safety?: DiscoverySafety;
@@ -26,6 +31,7 @@ export interface DiscoveryEligibility {
   distanceKm: number;
   commonInterests: string[];
   matchScore: number;
+  rankingVersion: string;
 }
 
 export function selectedSearchRadiusKm(profile: DiscoveryProfile): number {
@@ -70,18 +76,6 @@ export function calculateDistanceKm(
 export function commonInterests(first: string[], second: string[]): string[] {
   const firstInterests = new Set(first);
   return second.filter((interest) => firstInterests.has(interest));
-}
-
-export function calculateMatchScore(
-  sharedInterestCount: number,
-  firstInterestCount: number,
-  secondInterestCount: number,
-  distanceKm: number,
-): number {
-  const interestSimilarity = sharedInterestCount /
-    (firstInterestCount + secondInterestCount - sharedInterestCount);
-  const distanceScore = (10 - Math.min(distanceKm, 10)) / 10;
-  return interestSimilarity * 0.7 + distanceScore * 0.3;
 }
 
 export function meetsDistanceAwareThreshold(distanceKm: number, matchScore: number): boolean {
@@ -130,13 +124,19 @@ export function discoveryEligibility(
   const sharedInterests = commonInterests(viewerInterests, candidateInterests);
   if (sharedInterests.length < minCommonInterests) return null;
 
-  const matchScore = calculateMatchScore(
-    sharedInterests.length,
-    viewerInterests.length,
-    candidateInterests.length,
+  const matchScore = calculateDiscoveryScore({
+    viewerInterests,
+    candidateInterests,
+    viewerVibeTags: viewer.vibeTags,
+    candidateVibeTags: candidate.vibeTags,
     distanceKm,
-  );
+  });
   if (!meetsDistanceAwareThreshold(distanceKm, matchScore)) return null;
 
-  return { distanceKm, commonInterests: sharedInterests, matchScore };
+  return {
+    distanceKm,
+    commonInterests: sharedInterests,
+    matchScore,
+    rankingVersion: discoveryRankingVersion,
+  };
 }

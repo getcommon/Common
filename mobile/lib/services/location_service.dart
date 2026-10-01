@@ -4,7 +4,6 @@ import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:geoflutterfire_plus/geoflutterfire_plus.dart';
-import 'package:mobile/services/proximity_service.dart';
 import 'package:mobile/constants/proximity_constants.dart';
 import 'package:mobile/services/location_quality.dart';
 
@@ -481,13 +480,6 @@ class LocationService {
         }
         // Start tracking with GPS
         startTracking();
-      }
-
-      // Invalidate proximity cache so Home reflects the new location immediately
-      try {
-        ProximityService.instance.clearCache();
-      } catch (_) {
-        // Safe to ignore cache clear failures
       }
 
       if (kDebugMode) {
