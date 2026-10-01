@@ -5,6 +5,13 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/foundation.dart';
 import '../models/wave_models.dart';
 
+/// A user-safe callable failure. Technical details stay in debug logs.
+class WaveActionException implements Exception {
+  const WaveActionException(this.message);
+
+  final String message;
+}
+
 /// Service for managing wave requests and mutual matches
 class WaveService {
   WaveService._();
@@ -16,6 +23,25 @@ class WaveService {
 
   final _db = FirebaseFirestore.instance;
   final _functions = FirebaseFunctions.instance;
+
+  WaveActionException _actionError(
+    FirebaseFunctionsException error, {
+    required String action,
+  }) {
+    debugPrint('Wave $action failed (${error.code}): $error');
+    final message = switch (error.code) {
+      'unauthenticated' => 'Please sign in again before continuing.',
+      'already-exists' => 'You already sent a wave to this person.',
+      'resource-exhausted' => 'You’ve used today’s waves. Try again tomorrow.',
+      'not-found' ||
+      'failed-precondition' => 'That wave is no longer available.',
+      'permission-denied' => 'You no longer have access to that wave.',
+      'unavailable' || 'deadline-exceeded' =>
+        'We couldn’t reach Common Grounds. Check your connection and try again.',
+      _ => 'We couldn’t $action right now. Please try again shortly.',
+    };
+    return WaveActionException(message);
+  }
 
   /// Send a wave to another user
   ///
@@ -33,11 +59,12 @@ class WaveService {
       return response.data['waveId'] as String?;
     } on FirebaseFunctionsException catch (error) {
       if (error.code == 'already-exists') return null;
-      debugPrint('Error sending wave: $error');
-      rethrow;
+      throw _actionError(error, action: 'send this wave');
     } catch (e) {
       debugPrint('Error sending wave: $e');
-      rethrow;
+      throw const WaveActionException(
+        'We couldn’t send this wave right now. Please try again shortly.',
+      );
     }
   }
 
@@ -90,33 +117,23 @@ class WaveService {
             'response': WaveStatus.accepted.name,
           });
       return response.data['matchId'] as String?;
-    } catch (e) {
-      debugPrint('Error accepting wave: $e');
-      return null;
+    } on FirebaseFunctionsException catch (error) {
+      throw _actionError(error, action: 'accept this wave');
+    } catch (error) {
+      debugPrint('Error accepting wave: $error');
+      throw const WaveActionException(
+        'We couldn’t accept this wave right now. Please try again shortly.',
+      );
     }
   }
 
   /// Decline an incoming wave
   Future<bool> declineWave(String waveId) async {
     try {
-      final wave = await getWave(waveId);
-      if (wave == null) {
-        debugPrint('Wave not found: $waveId');
-        return false;
-      }
-
-      if (wave.status != WaveStatus.pending) {
-        debugPrint('Wave already responded to: $waveId');
-        return false;
-      }
-
-      // Update wave status to declined
-      await _db.collection('waves').doc(waveId).update({
-        'status': WaveStatus.declined.name,
-        'respondedAt': FieldValue.serverTimestamp(),
+      await _functions.httpsCallable('respondToWave').call<void>({
+        'waveId': waveId,
+        'response': WaveStatus.declined.name,
       });
-
-      debugPrint('❌ Wave declined: $waveId');
       return true;
     } catch (e) {
       debugPrint('Error declining wave: $e');
@@ -127,20 +144,9 @@ class WaveService {
   /// Cancel a sent wave (withdraw it)
   Future<bool> cancelWave(String waveId) async {
     try {
-      final wave = await getWave(waveId);
-      if (wave == null) {
-        debugPrint('Wave not found: $waveId');
-        return false;
-      }
-
-      if (wave.status != WaveStatus.pending) {
-        debugPrint('Cannot cancel wave that is not pending: $waveId');
-        return false;
-      }
-
-      // Delete the wave
-      await _db.collection('waves').doc(waveId).delete();
-      debugPrint('🗑️ Wave cancelled: $waveId');
+      await _functions.httpsCallable('cancelWave').call<void>({
+        'waveId': waveId,
+      });
       return true;
     } catch (e) {
       debugPrint('Error cancelling wave: $e');

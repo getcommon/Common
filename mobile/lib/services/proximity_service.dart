@@ -33,6 +33,18 @@ class ProximityService {
     double? maxDistanceKm,
     int minCommonInterests = kMinCommonInterests,
     int limit = kDefaultResultLimit,
+  }) => _findServerMatches();
+
+  /// Previous client-side matcher retained temporarily only as migration
+  /// reference. Discover never calls it: profile retrieval, exact distance,
+  /// eligibility, and ranking are server-authoritative.
+  @Deprecated('Discover uses the server-authoritative matcher.')
+  // ignore: unused_element
+  Future<List<ProximityMatch>> _legacyClientMatcher(
+    UserProfile currentUserProfile, {
+    double? maxDistanceKm,
+    int minCommonInterests = kMinCommonInterests,
+    int limit = kDefaultResultLimit,
   }) async {
     // Use user's preferred search radius if not explicitly provided
     final searchRadius =
@@ -515,6 +527,15 @@ class ProximityService {
           uid: profile['uid'] as String,
           displayName: profile['displayName'] as String?,
           photoUrl: profile['photoUrl'] as String?,
+          featuredPhotoUrl: profile['featuredPhotoUrl'] as String?,
+          photoMoments: (profile['photoMoments'] as List? ?? const [])
+              .whereType<Map>()
+              .map(
+                (moment) => ProfilePhotoMoment.fromMap(
+                  Map<String, dynamic>.from(moment),
+                ),
+              )
+              .toList(),
           bio: profile['bio'] as String?,
           interests:
               (profile['interests'] as List?)?.cast<String>() ?? const [],

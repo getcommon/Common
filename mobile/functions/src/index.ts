@@ -7,6 +7,8 @@ import {
   discoveryEligibility,
   selectedSearchRadiusKm,
 } from './discovery_eligibility';
+import { geohashRangesForRadius } from './geo_query';
+import { publicDiscoverProfile, type PublicDiscoverProfile } from './discovery_payload';
 import { moderationRejection } from './content_moderation';
 
 // Initialize Firebase Admin
@@ -31,10 +33,13 @@ interface UserProfile {
   uid: string;
   displayName?: string;
   photoUrl?: string;
+  featuredPhotoUrl?: string;
+  photoMoments?: Array<{ photoUrl?: string; prompt?: string }>;
   bio?: string;
   classYear?: string;
   major?: string;
   interests: string[];
+  vibeTags?: string[];
   createdAt: admin.firestore.Timestamp;
   updatedAt: admin.firestore.Timestamp;
   location?: UserLocation;
@@ -43,15 +48,6 @@ interface UserProfile {
     blockedUserIds?: string[];
     unmatchedUserIds?: string[];
   };
-}
-
-interface PublicDiscoverProfile {
-  uid: string;
-  displayName?: string;
-  photoUrl?: string;
-  bio?: string;
-  interests: string[];
-  vibeTags: string[];
 }
 
 interface ProximityMatch {
@@ -195,11 +191,13 @@ export const respondToWave = onCall({ region: 'us-central1' }, async (request) =
     if (wave.receiverId !== request.auth!.uid || wave.status !== 'pending') {
       throw new HttpsError('failed-precondition', 'That wave is no longer available.');
     }
-    transaction.update(waveRef, {
-      status: response,
-      respondedAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
-    if (response === 'declined') return;
+    if (response === 'declined') {
+      transaction.update(waveRef, {
+        status: response,
+        respondedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      return;
+    }
 
     const reverseRef = db.collection('waves').doc();
     const id = connectionId(wave.senderId, wave.receiverId);
@@ -216,6 +214,12 @@ export const respondToWave = onCall({ region: 'us-central1' }, async (request) =
       transaction.get(conversationRef),
     ]);
     const reverseWaveId = existingReverse.empty ? reverseRef.id : existingReverse.docs[0].id;
+    // Firestore transactions require every read above to complete before this
+    // first write. Keep the accepted-wave transition in the same atomic commit.
+    transaction.update(waveRef, {
+      status: response,
+      respondedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
     if (existingReverse.empty) {
       transaction.set(reverseRef, {
         senderId: wave.receiverId,
@@ -237,7 +241,7 @@ export const respondToWave = onCall({ region: 'us-central1' }, async (request) =
         user1Id: wave.senderId,
         user2Id: wave.receiverId,
         matchedAt: admin.firestore.FieldValue.serverTimestamp(),
-        wave1Id: wave.id,
+        wave1Id: waveRef.id,
         wave2Id: reverseWaveId,
         user1Profile: wave.senderProfile,
         user2Profile: wave.receiverProfile,
@@ -260,6 +264,64 @@ export const respondToWave = onCall({ region: 'us-central1' }, async (request) =
     matchId = id;
   });
   return { matchId };
+});
+
+/** Cancels only the caller's own pending outgoing wave. */
+export const cancelWave = onCall({ region: 'us-central1' }, async (request) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'Sign in to cancel a wave.');
+  const waveId = request.data?.waveId;
+  if (typeof waveId !== 'string' || !waveId) {
+    throw new HttpsError('invalid-argument', 'A wave is required.');
+  }
+
+  const waveRef = admin.firestore().collection('waves').doc(waveId);
+  await admin.firestore().runTransaction(async (transaction) => {
+    const wave = await transaction.get(waveRef);
+    if (!wave.exists) throw new HttpsError('not-found', 'Wave not found.');
+    const data = wave.data()!;
+    if (data.senderId !== request.auth!.uid || data.status !== 'pending') {
+      throw new HttpsError('failed-precondition', 'That wave can no longer be cancelled.');
+    }
+    transaction.delete(waveRef);
+  });
+  return { cancelled: true };
+});
+
+/** Marks a participant's conversation view read without granting broad writes. */
+export const markConversationRead = onCall({ region: 'us-central1' }, async (request) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'Sign in to update a conversation.');
+  const conversationId = request.data?.conversationId;
+  if (typeof conversationId !== 'string' || !conversationId) {
+    throw new HttpsError('invalid-argument', 'A conversation is required.');
+  }
+
+  const conversationRef = admin.firestore().collection('conversations').doc(conversationId);
+  await admin.firestore().runTransaction(async (transaction) => {
+    const conversation = await transaction.get(conversationRef);
+    if (!conversation.exists || !conversation.data()?.participantIds?.includes(request.auth!.uid)) {
+      throw new HttpsError('permission-denied', 'You are not part of this conversation.');
+    }
+    transaction.update(conversationRef, {
+      [`unreadCount.${request.auth!.uid}`]: 0,
+      [`lastViewed.${request.auth!.uid}`]: admin.firestore.FieldValue.serverTimestamp(),
+    });
+  });
+  return { markedRead: true };
+});
+
+/** Removes a conversation only after verifying the caller is a participant. */
+export const removeConversation = onCall({ region: 'us-central1' }, async (request) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'Sign in to remove a conversation.');
+  const conversationId = request.data?.conversationId;
+  if (typeof conversationId !== 'string' || !conversationId) {
+    throw new HttpsError('invalid-argument', 'A conversation is required.');
+  }
+  const conversation = await admin.firestore().collection('conversations').doc(conversationId).get();
+  if (!conversation.exists || !conversation.data()?.participantIds?.includes(request.auth.uid)) {
+    throw new HttpsError('permission-denied', 'You are not part of this conversation.');
+  }
+  await deleteConversation(conversationId);
+  return { removed: true };
 });
 
 /**
@@ -412,27 +474,8 @@ export const deleteUserAccount = onCall({ region: 'us-central1' }, async (reques
   return { deleted: true };
 });
 
-/**
- * Get nearby geohashes for proximity search
- */
-function getNearbyGeohashes(
-  centerGeohash: string,
-  maxDistanceKm: number
-): string[] {
-  // For now, return a simple implementation
-  // In production, you'd want a more sophisticated geohash expansion
-  const geohashes = [centerGeohash];
-  
-  // Add neighboring geohashes (simplified)
-  if (centerGeohash.length >= 6) {
-    const base = centerGeohash.substring(0, 5);
-    for (let i = 0; i < 8; i++) {
-      geohashes.push(base + i.toString());
-    }
-  }
-  
-  return geohashes.slice(0, 10); // Firestore whereIn limit
-}
+const candidateLimitPerGeoRange = 250;
+const candidatePoolLimit = 500;
 
 /**
  * Cloud Function to find nearby users with similar interests
@@ -488,36 +531,55 @@ export const findNearbyMatches = onCall(
         };
       }
 
-      const currentGeohash = currentUserProfile.location.geohash;
       const currentLat = currentUserProfile.location.latitude;
       const currentLng = currentUserProfile.location.longitude;
 
       if (!Number.isFinite(currentLat) || !Number.isFinite(currentLng) ||
-          typeof currentGeohash !== 'string' || !currentGeohash) {
+          currentLat < -90 || currentLat > 90 || currentLng < -180 || currentLng > 180) {
         throw new HttpsError(
           'invalid-argument',
           'Current user location coordinates not available'
         );
       }
 
-      // Get nearby geohashes
-      const nearbyGeohashes = getNearbyGeohashes(currentGeohash, selectedRadiusKm);
+      // These vetted-library bounds cover every geohash cell that intersects
+      // the search circle. They are only candidate retrieval; the exact
+      // Haversine boundary remains enforced below by discoveryEligibility.
+      const geohashRanges = geohashRangesForRadius(
+        currentLat,
+        currentLng,
+        selectedRadiusKm,
+      );
 
       console.log(`🔍 PROXIMITY SEARCH STARTED for user: ${currentUserProfile.displayName}`);
-      console.log(`📍 Current location: ${currentLat}, ${currentLng}`);
-      console.log(`📍 Current geohash: ${currentGeohash}`);
-      console.log(`📍 User interests: ${currentUserProfile.interests}`);
-      console.log(`🔍 Searching in ${nearbyGeohashes.length} geohash areas`);
+      console.log(`🔍 Searching ${geohashRanges.length} geospatial candidate ranges`);
 
-      // Query users in nearby geohashes
-      const query = await db
-        .collection('users')
-        .where('location.geohash', 'in', nearbyGeohashes)
-        .where('location.isVisible', '==', true)
-        .limit(100) // Get more users for filtering
-        .get();
+      const rangeSnapshots = await Promise.all(geohashRanges.map(([start, end]) =>
+        db.collection('users')
+          .where('location.isVisible', '==', true)
+          .orderBy('location.geohash')
+          .startAt(start)
+          .endAt(end)
+          .limit(candidateLimitPerGeoRange)
+          .get(),
+      ));
+      const candidates = new Map<string, FirebaseFirestore.QueryDocumentSnapshot>();
+      for (const snapshot of rangeSnapshots) {
+        for (const document of snapshot.docs) candidates.set(document.id, document);
+      }
+      // When a dense area exceeds the bounded pool, favor recently refreshed
+      // presence rather than incidental document/lexicographic order.
+      const candidateDocuments = [...candidates.values()]
+        .sort((first, second) => {
+          const firstUpdated = (first.data().location?.lastUpdated as admin.firestore.Timestamp | undefined)
+            ?.toMillis() ?? 0;
+          const secondUpdated = (second.data().location?.lastUpdated as admin.firestore.Timestamp | undefined)
+            ?.toMillis() ?? 0;
+          return secondUpdated - firstUpdated;
+        })
+        .slice(0, candidatePoolLimit);
 
-      console.log(`🔍 Query found ${query.docs.length} users`);
+      console.log(`🔍 Retrieved ${candidateDocuments.length} deduplicated candidates`);
 
       const matches: ProximityMatch[] = [];
       let totalProcessed = 0;
@@ -525,7 +587,7 @@ export const findNearbyMatches = onCall(
       // Pre-compute current user's interest set for O(1) lookups
       // const currentInterestsSet = new Set(currentUserProfile.interests);
 
-      for (const doc of query.docs) {
+      for (const doc of candidateDocuments) {
         // Skip current user
         if (doc.id === currentUserUid) continue;
 
@@ -544,14 +606,7 @@ export const findNearbyMatches = onCall(
 
           const coarseDistanceKm = eligibility.distanceKm < 0.48 ? 0.2 : 0.5;
           matches.push({
-            userProfile: {
-              uid: doc.id,
-              displayName: userProfile.displayName ?? null,
-              photoUrl: userProfile.photoUrl ?? null,
-              bio: userProfile.bio ?? null,
-              interests: userProfile.interests ?? [],
-              vibeTags: (userProfile as any).vibeTags ?? [],
-            },
+            userProfile: publicDiscoverProfile(userProfile, doc.id),
             // Representative band only: clients never receive exact distance
             // or the underlying location document.
             distanceKm: coarseDistanceKm,

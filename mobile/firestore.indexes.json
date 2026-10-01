@@ -127,20 +127,12 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
-          "fieldPath": "location.geohash",
-          "order": "ASCENDING"
-        },
-        {
           "fieldPath": "location.isVisible",
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "location.lastUpdated",
-          "order": "DESCENDING"
-        },
-        {
-          "fieldPath": "__name__",
-          "order": "DESCENDING"
+          "fieldPath": "location.geohash",
+          "order": "ASCENDING"
         }
       ],
       "density": "SPARSE_ALL"
@@ -183,6 +175,25 @@
         {
           "fieldPath": "__name__",
           "order": "DESCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
+      "collectionGroup": "waves",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "senderId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "timestamp",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
         }
       ],
       "density": "SPARSE_ALL"

@@ -26,6 +26,7 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   bool _isSendingWave = false;
+  bool _isRefreshingDiscover = false;
   bool _waveSent = false;
 
   @override
@@ -72,63 +73,70 @@ class _HomePageState extends State<HomePage> {
                                   )
                                   .toList();
                               final profile = _discoverProfileFor(safeMatches);
-                              return CustomScrollView(
-                                slivers: [
-                                  SliverPadding(
-                                    padding: const EdgeInsets.fromLTRB(
-                                      24,
-                                      18,
-                                      24,
-                                      40,
-                                    ),
-                                    sliver: SliverList(
-                                      delegate: SliverChildListDelegate([
-                                        const _DiscoverHeader(),
-                                        const SizedBox(height: 30),
-                                        if (profile != null)
-                                          _PublicProfile(
-                                            profile: profile,
-                                            wavesRemaining: wavesRemaining
-                                                .clamp(
-                                                  0,
-                                                  WaveService.dailyWaveLimit,
-                                                )
-                                                .toInt(),
-                                            waveSent: _waveSent,
-                                            isSending: _isSendingWave,
-                                            onWave:
-                                                profile.profile.uid ==
-                                                        erenDiscoverProfile
-                                                            .profile
-                                                            .uid ||
-                                                    wavesRemaining <= 0
-                                                ? null
-                                                : () => _sendWave(
-                                                    viewer,
-                                                    profile,
-                                                  ),
-                                          )
-                                        else if (matchesSnapshot.hasError)
-                                          const _DiscoverState(
-                                            title:
-                                                'Discover is taking a moment',
-                                            message:
-                                                'Check your connection, then try again.',
-                                          )
-                                        else if (matchesSnapshot
-                                                .connectionState ==
-                                            ConnectionState.waiting)
-                                          const _DiscoverLoading()
-                                        else
-                                          const _DiscoverState(
-                                            title: 'Nothing new nearby yet',
-                                            message:
-                                                'We’ll only introduce people when there’s meaningful common ground.',
+                              return RefreshIndicator.noSpinner(
+                                onRefresh: () => _refreshDiscover(viewer),
+                                child: CustomScrollView(
+                                  physics:
+                                      const AlwaysScrollableScrollPhysics(),
+                                  slivers: [
+                                    SliverPadding(
+                                      padding: const EdgeInsets.fromLTRB(
+                                        24,
+                                        18,
+                                        24,
+                                        40,
+                                      ),
+                                      sliver: SliverList(
+                                        delegate: SliverChildListDelegate([
+                                          _DiscoverHeader(
+                                            isRefreshing: _isRefreshingDiscover,
                                           ),
-                                      ]),
+                                          const SizedBox(height: 30),
+                                          if (profile != null)
+                                            _PublicProfile(
+                                              profile: profile,
+                                              wavesRemaining: wavesRemaining
+                                                  .clamp(
+                                                    0,
+                                                    WaveService.dailyWaveLimit,
+                                                  )
+                                                  .toInt(),
+                                              waveSent: _waveSent,
+                                              isSending: _isSendingWave,
+                                              onWave:
+                                                  profile.profile.uid ==
+                                                          erenDiscoverProfile
+                                                              .profile
+                                                              .uid ||
+                                                      wavesRemaining <= 0
+                                                  ? null
+                                                  : () => _sendWave(
+                                                      viewer,
+                                                      profile,
+                                                    ),
+                                            )
+                                          else if (matchesSnapshot.hasError)
+                                            const _DiscoverState(
+                                              title:
+                                                  'Discover is taking a moment',
+                                              message:
+                                                  'Check your connection, then try again.',
+                                            )
+                                          else if (matchesSnapshot
+                                                  .connectionState ==
+                                              ConnectionState.waiting)
+                                            const _DiscoverLoading()
+                                          else
+                                            const _DiscoverState(
+                                              title: 'Nothing new nearby yet',
+                                              message:
+                                                  'We’ll only introduce people when there’s meaningful common ground.',
+                                            ),
+                                        ]),
+                                      ),
                                     ),
-                                  ),
-                                ],
+                                  ],
+                                ),
                               );
                             },
                           );
@@ -148,6 +156,25 @@ class _HomePageState extends State<HomePage> {
     }
     // Eren remains a visual fixture only when developing without seeded data.
     return kDebugMode && matches != null ? erenDiscoverProfile : null;
+  }
+
+  /// Pull-to-refresh asks the callable backend for a new discovery result;
+  /// no other member's document is queried directly from the client.
+  Future<void> _refreshDiscover(UserProfile viewer) async {
+    setState(() => _isRefreshingDiscover = true);
+    try {
+      await ProximityService.instance.refreshMatches(viewer);
+      if (mounted) setState(() {});
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not refresh nearby people. Try again shortly.'),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isRefreshingDiscover = false);
+    }
   }
 
   Future<void> _sendWave(UserProfile sender, DiscoverProfile recipient) async {
@@ -182,14 +209,12 @@ class _HomePageState extends State<HomePage> {
           ),
         ),
       );
-    } on StateError {
+    } on WaveActionException catch (error) {
       if (!mounted) return;
       setState(() => _isSendingWave = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('You’ve used today’s waves. Try again tomorrow.'),
-        ),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
     } catch (_) {
       if (!mounted) return;
       setState(() => _isSendingWave = false);
@@ -203,7 +228,9 @@ class _HomePageState extends State<HomePage> {
 }
 
 class _DiscoverHeader extends StatelessWidget {
-  const _DiscoverHeader();
+  const _DiscoverHeader({required this.isRefreshing});
+
+  final bool isRefreshing;
 
   @override
   Widget build(BuildContext context) {
@@ -231,14 +258,16 @@ class _DiscoverHeader extends StatelessWidget {
             ],
           ),
         ),
-        const _PresenceMark(),
+        _PresenceMark(isRefreshing: isRefreshing),
       ],
     );
   }
 }
 
 class _PresenceMark extends StatelessWidget {
-  const _PresenceMark();
+  const _PresenceMark({required this.isRefreshing});
+
+  final bool isRefreshing;
 
   @override
   Widget build(BuildContext context) {
@@ -249,14 +278,32 @@ class _PresenceMark extends StatelessWidget {
         color: AppColors.surfaceVariantLight,
         borderRadius: BorderRadius.circular(20),
       ),
-      child: const Row(
+      child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.near_me_outlined, size: 15, color: AppColors.secondary),
-          SizedBox(width: 5),
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 180),
+            child: isRefreshing
+                ? const SizedBox(
+                    key: ValueKey('refreshing'),
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 1.8,
+                      color: AppColors.secondary,
+                    ),
+                  )
+                : const Icon(
+                    Icons.near_me_outlined,
+                    key: ValueKey('nearby'),
+                    size: 15,
+                    color: AppColors.secondary,
+                  ),
+          ),
+          const SizedBox(width: 5),
           Text(
-            'Nearby',
-            style: TextStyle(
+            isRefreshing ? 'Checking' : 'Nearby',
+            style: const TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
               color: AppColors.secondary,

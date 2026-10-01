@@ -4,7 +4,10 @@
   "scripts": {
     "lint": "eslint --ext .js,.ts .",
     "build": "tsc",
-    "test": "npm run build && node --test lib/*.test.js",
+    "test": "npm run build && node --test $(find lib -maxdepth 1 -name '*.test.js' ! -name 'firestore.rules.test.js' ! -name 'wave_flow.test.js')",
+    "test:rules": "npm run build && npx firebase-tools@latest emulators:exec --project common-grounds-rules --only firestore \"node --test lib/firestore.rules.test.js\"",
+    "test:flows": "npm run build && npx firebase-tools@latest emulators:exec --project common-grounds-flow --only firestore \"node --test lib/wave_flow.test.js\"",
+    "test:all": "npm run test && npm run test:rules && npm run test:flows",
     "build:watch": "tsc --watch",
     "serve": "npm run build && firebase emulators:start --only functions",
     "shell": "npm run build && firebase functions:shell",
@@ -19,13 +22,16 @@
   "dependencies": {
     "@dataconnect/generated": "file:src/dataconnect-generated",
     "firebase-admin": "^12.0.0",
-    "firebase-functions": "^7.4.0"
+    "firebase-functions": "^7.4.0",
+    "geofire-common": "^6.0.0"
   },
   "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.2",
     "@typescript-eslint/eslint-plugin": "^5.12.0",
     "@typescript-eslint/parser": "^5.12.0",
     "eslint": "^8.9.0",
     "eslint-plugin-import": "^2.25.4",
+    "firebase": "^12.10.0",
     "typescript": "^5.5.0"
   },
   "private": true

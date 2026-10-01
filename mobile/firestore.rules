@@ -20,6 +20,39 @@ service cloud.firestore {
       return !request.resource.data.diff(resource.data).affectedKeys()
           .hasAny(['location']) ||
         (
+          request.resource.data.location.geohash is string &&
+          request.resource.data.location.geohash.size() == 6 &&
+          request.resource.data.location.latitude is number &&
+          request.resource.data.location.latitude >= -90 &&
+          request.resource.data.location.latitude <= 90 &&
+          request.resource.data.location.longitude is number &&
+          request.resource.data.location.longitude >= -180 &&
+          request.resource.data.location.longitude <= 180 &&
+          request.resource.data.location.isVisible is bool &&
+          request.resource.data.location.lastUpdated == request.time &&
+          (
+            (!request.resource.data.location.isVisible &&
+              request.resource.data.location.expiresAt <= request.time) ||
+            (request.resource.data.location.isVisible &&
+              request.resource.data.location.expiresAt > request.time &&
+              request.resource.data.location.expiresAt <=
+                request.time + duration.value(10, 'm'))
+          )
+        );
+    }
+
+    function hasValidNewPresence() {
+      return !request.resource.data.keys().hasAny(['location']) ||
+        (
+          request.resource.data.location.geohash is string &&
+          request.resource.data.location.geohash.size() == 6 &&
+          request.resource.data.location.latitude is number &&
+          request.resource.data.location.latitude >= -90 &&
+          request.resource.data.location.latitude <= 90 &&
+          request.resource.data.location.longitude is number &&
+          request.resource.data.location.longitude >= -180 &&
+          request.resource.data.location.longitude <= 180 &&
+          request.resource.data.location.isVisible is bool &&
           request.resource.data.location.lastUpdated == request.time &&
           (
             (!request.resource.data.location.isVisible &&
@@ -39,7 +72,7 @@ service cloud.firestore {
 
       // Owners can update their profile, while presence timestamps remain
       // bounded and server-authenticated for matching.
-      allow create: if isOwner(userId);
+      allow create: if isOwner(userId) && hasValidNewPresence();
       allow update: if isOwner(userId) && hasValidPresenceUpdate();
       allow delete: if isOwner(userId);
     }
@@ -72,20 +105,19 @@ service cloud.firestore {
       // Mutual-wave callable creates the conversation.
       allow create: if false;
 
-      // Allow updating if you're a participant (for marking as read, etc.)
-      allow update: if isSignedIn() &&
-        request.auth.uid in resource.data.participantIds;
+      // Callable functions own all conversation state, including unread
+      // counters and last-viewed markers. A participant cannot alter another
+      // member's state, metadata, or message preview through a direct write.
+      allow update: if false;
 
-      // A participant may remove their local conversation view.
-      allow delete: if isSignedIn() &&
-        request.auth.uid in resource.data.participantIds;
+      // Removal is also a callable transition so client code cannot delete
+      // shared messages or conversation documents directly.
+      allow delete: if false;
 
       // _counters subcollection for message sequence numbers
       match /_counters/{counterId} {
-        // Allow authenticated users to read/write counters
-        // The parent conversation and message creation rules already enforce participant checks
-        // so we can safely allow counter access for authenticated users
-        allow read, write: if isSignedIn();
+        // Sequence counters are maintained by the sendMessage callable only.
+        allow read, write: if false;
       }
     }
 

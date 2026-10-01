@@ -135,7 +135,16 @@ class ActivityPage extends StatelessWidget {
   }
 
   Future<void> _acceptWave(BuildContext context, WaveRequest wave) async {
-    final matchId = await WaveService.instance.acceptWave(wave.id);
+    String? matchId;
+    try {
+      matchId = await WaveService.instance.acceptWave(wave.id);
+    } on WaveActionException catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
+      return;
+    }
     if (!context.mounted) return;
     if (matchId == null) {
       ScaffoldMessenger.of(context).showSnackBar(

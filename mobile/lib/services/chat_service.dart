@@ -8,6 +8,7 @@ class ChatService {
   static final instance = ChatService._();
 
   final _db = FirebaseFirestore.instance;
+  final _functions = FirebaseFunctions.instance;
 
   /// Finds the server-created conversation for a mutual connection.
   Future<String?> findConversationId(
@@ -34,43 +35,11 @@ class ChatService {
     Map<String, dynamic> currentUserProfile,
     Map<String, dynamic> otherUserProfile,
   ) async {
-    try {
-      // Check if conversation already exists
-      final existingQuery = await _db
-          .collection('conversations')
-          .where('participantIds', arrayContains: currentUserId)
-          .get();
-
-      // Find conversation with both participants
-      for (final doc in existingQuery.docs) {
-        final participantIds = (doc.data()['participantIds'] as List)
-            .cast<String>();
-        if (participantIds.contains(otherUserId)) {
-          return doc.id;
-        }
-      }
-
-      // Create new conversation
-      final conversationRef = _db.collection('conversations').doc();
-      final now = DateTime.now();
-      final conversation = Conversation(
-        id: conversationRef.id,
-        participantIds: [currentUserId, otherUserId],
-        participantProfiles: {
-          currentUserId: currentUserProfile,
-          otherUserId: otherUserProfile,
-        },
-        unreadCount: {currentUserId: 0, otherUserId: 0},
-        createdAt: now,
-        lastMessageTime: now, // Initialize with createdAt so orderBy works
-      );
-
-      await conversationRef.set(conversation.toMap());
-      return conversationRef.id;
-    } catch (e) {
-      debugPrint('Error in getOrCreateConversation: $e');
-      rethrow;
-    }
+    final existingId = await findConversationId(currentUserId, otherUserId);
+    if (existingId != null) return existingId;
+    throw StateError(
+      'Conversations are created only after a mutual wave is accepted.',
+    );
   }
 
   /// Send a message in a conversation
@@ -97,48 +66,8 @@ class ChatService {
     String conversationId,
     String userId,
   ) async {
-    // Get the conversation to find the other user
-    final convDoc = await _db
-        .collection('conversations')
-        .doc(conversationId)
-        .get();
-    if (!convDoc.exists) return;
-
-    final conv = Conversation.fromMap(convDoc.id, convDoc.data()!);
-    final otherUserId = conv.getOtherParticipantId(userId);
-
-    // Get the latest message from the other user to use its timestamp
-    // This ensures all messages visible when viewing are marked as read
-    final latestMessageQuery = await _db
-        .collection('messages')
-        .where('conversationId', isEqualTo: conversationId)
-        .where('senderId', isEqualTo: otherUserId)
-        .orderBy('timestamp', descending: true)
-        .limit(1)
-        .get();
-
-    Timestamp lastViewedTimestamp;
-    if (latestMessageQuery.docs.isNotEmpty) {
-      // Use the latest message's timestamp (or slightly after to account for any edge cases)
-      final latestMessage = latestMessageQuery.docs.first;
-      final latestTimestamp = latestMessage.data()['timestamp'] as Timestamp?;
-      if (latestTimestamp != null) {
-        // Use the latest message timestamp to mark all visible messages as read
-        lastViewedTimestamp = latestTimestamp;
-      } else {
-        // Fallback to server timestamp if message timestamp is not yet resolved
-        lastViewedTimestamp = Timestamp.now();
-      }
-    } else {
-      // No messages from other user yet, use server timestamp
-      lastViewedTimestamp = Timestamp.now();
-    }
-
-    // Update conversation with unread count = 0 and lastViewed timestamp
-    // Using the latest message timestamp ensures all visible messages are marked as read
-    await _db.collection('conversations').doc(conversationId).update({
-      'unreadCount.$userId': 0,
-      'lastViewed.$userId': lastViewedTimestamp,
+    await _functions.httpsCallable('markConversationRead').call<void>({
+      'conversationId': conversationId,
     });
   }
 
@@ -260,21 +189,9 @@ class ChatService {
 
   /// Delete a conversation and all its messages
   Future<void> deleteConversation(String conversationId) async {
-    // Delete all messages in the conversation
-    final messages = await _db
-        .collection('messages')
-        .where('conversationId', isEqualTo: conversationId)
-        .get();
-
-    final batch = _db.batch();
-    for (final doc in messages.docs) {
-      batch.delete(doc.reference);
-    }
-
-    // Delete the conversation
-    batch.delete(_db.collection('conversations').doc(conversationId));
-
-    await batch.commit();
+    await _functions.httpsCallable('removeConversation').call<void>({
+      'conversationId': conversationId,
+    });
 
     if (kDebugMode) {
       debugPrint('Deleted conversation $conversationId');
