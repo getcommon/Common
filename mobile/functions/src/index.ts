@@ -11,6 +11,7 @@ import { geohashRangesForRadius } from './geo_query';
 import { publicDiscoverProfile, type PublicDiscoverProfile } from './discovery_payload';
 import { discoveryRankingVersion } from './discovery_ranking';
 import { moderationRejection } from './content_moderation';
+import { hasNewSafetyEntry, recordDiscoveryMetrics } from './discovery_metrics';
 
 // Initialize Firebase Admin
 admin.initializeApp();
@@ -102,6 +103,18 @@ function profilePreview(profile: FirebaseFirestore.DocumentData) {
   };
 }
 
+/** Measurement is useful, but must never change a member-facing outcome. */
+async function recordMetricsBestEffort(
+  metrics: Parameters<typeof recordDiscoveryMetrics>[0],
+  db?: FirebaseFirestore.Firestore,
+): Promise<void> {
+  try {
+    await recordDiscoveryMetrics(metrics, discoveryRankingVersion, db);
+  } catch (error) {
+    console.error('Unable to record discovery metrics:', error);
+  }
+}
+
 /**
  * Creates a wave only after checking the daily allowance and existing state on
  * the server. Client supplied profile metadata is intentionally ignored.
@@ -166,6 +179,9 @@ export const sendWave = onCall({ region: 'us-central1' }, async (request) => {
     });
   });
 
+  // A daily aggregate only—never the sender, recipient, or their location.
+  await recordMetricsBestEffort({ wavesSent: 1 }, db);
+
   return { waveId: waveRef.id };
 });
 
@@ -186,6 +202,7 @@ export const respondToWave = onCall({ region: 'us-central1' }, async (request) =
   const db = admin.firestore();
   const waveRef = db.collection('waves').doc(waveId);
   let matchId: string | null = null;
+  let createdMatch = false;
   await db.runTransaction(async (transaction) => {
     const waveSnapshot = await transaction.get(waveRef);
     if (!waveSnapshot.exists) throw new HttpsError('not-found', 'Wave not found.');
@@ -239,6 +256,7 @@ export const respondToWave = onCall({ region: 'us-central1' }, async (request) =
       });
     }
     if (!existingMatch.exists) {
+      createdMatch = true;
       transaction.set(matchRef, {
         user1Id: wave.senderId,
         user2Id: wave.receiverId,
@@ -265,6 +283,9 @@ export const respondToWave = onCall({ region: 'us-central1' }, async (request) =
     }
     matchId = id;
   });
+  if (createdMatch) {
+    await recordMetricsBestEffort({ mutualMatches: 1 }, db);
+  }
   return { matchId };
 });
 
@@ -628,6 +649,13 @@ export const findNearbyMatches = onCall(
       matches.sort((a, b) => b.matchScore - a.matchScore);
       const limitedMatches = matches.slice(0, limit);
 
+      // This is deliberately a count, not an event log. It tells us whether
+      // ranking versions lead to waves/matches without retaining who saw whom.
+      await recordMetricsBestEffort({
+        discoveryRequests: 1,
+        profilesShown: limitedMatches.length,
+      }, db);
+
       console.log(`✅ Found ${limitedMatches.length} matches out of ${totalProcessed} processed users`);
       console.log(`⏱️ Execution time: ${Date.now() - startTime}ms`);
 
@@ -652,6 +680,27 @@ export const findNearbyMatches = onCall(
       );
     }
   }
+);
+
+/**
+ * Converts member-owned safety choices into anonymous aggregate outcomes.
+ * One update counts at most one action: blocking also adds an unmatch, but is
+ * measured as a block rather than double-counting both signals.
+ */
+export const onSafetyStateUpdated = onDocumentUpdated(
+  { document: 'users/{userId}', region: 'us-central1' },
+  async (event) => {
+    const before = event.data?.before.data()?.safety ?? {};
+    const after = event.data?.after.data()?.safety ?? {};
+    const metric = hasNewSafetyEntry(before.blockedUserIds, after.blockedUserIds)
+      ? 'blocks'
+      : hasNewSafetyEntry(before.unmatchedUserIds, after.unmatchedUserIds)
+        ? 'unmatches'
+        : hasNewSafetyEntry(before.hiddenWaveIds, after.hiddenWaveIds)
+          ? 'hides'
+          : null;
+    if (metric) await recordMetricsBestEffort({ [metric]: 1 });
+  },
 );
 
 /**
