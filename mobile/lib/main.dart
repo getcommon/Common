@@ -96,6 +96,8 @@ class _BootstrapGateState extends State<BootstrapGate>
     with WidgetsBindingObserver {
   String? _activeUserId;
   bool _hasAuthenticatedThisSession = false;
+  final Set<String> _locallyVerifiedUserIds = <String>{};
+  final Set<String> _locallyCompletedDiscoveryUserIds = <String>{};
   String? _servicesUserId;
   Future<void>? _servicesInitialization;
 
@@ -203,12 +205,17 @@ class _BootstrapGateState extends State<BootstrapGate>
               );
             }
 
+            // The stream is authoritative for sign-out. Reading currentUser
+            // here can briefly return a stale credential after sign-out and
+            // incorrectly send someone straight back to verification.
             final user = authSnap.data;
             debugPrint('🔍 BootstrapGate: User = ${user?.uid ?? "null"}');
             if (user == null) {
               _activeUserId = null;
               _servicesUserId = null;
               _servicesInitialization = null;
+              _locallyVerifiedUserIds.clear();
+              _locallyCompletedDiscoveryUserIds.clear();
               // Onboarding is only for a genuinely new launch. Once someone
               // has had an authenticated session, signing out should always
               // return them to the login screen.
@@ -231,6 +238,19 @@ class _BootstrapGateState extends State<BootstrapGate>
             }
 
             _hasAuthenticatedThisSession = true;
+
+            // Email/password registration intentionally stops here: verify the
+            // entered address before profile setup or discovery. The dedicated
+            // App Review account is the only exception. OAuth users arrive
+            // with verified identity from their provider.
+            if (AuthService.instance.requiresEmailVerification(user) &&
+                !_locallyVerifiedUserIds.contains(user.uid)) {
+              return EmailVerificationPage(
+                email: user.email,
+                onVerified: () =>
+                    setState(() => _locallyVerifiedUserIds.add(user.uid)),
+              );
+            }
 
             // Ensure there's a profile doc, then watch it.
             debugPrint(
@@ -315,11 +335,14 @@ class _BootstrapGateState extends State<BootstrapGate>
                             ),
                       );
                     }
-                    if (AuthService.instance.requiresEmailVerification(user)) {
-                      return EmailVerificationPage(email: user.email);
-                    }
-                    if (!profile.hasCompletedDiscoverySetup) {
-                      return DiscoverabilitySetupPage(profile: profile);
+                    if (!profile.hasCompletedDiscoverySetup &&
+                        !_locallyCompletedDiscoveryUserIds.contains(user.uid)) {
+                      return DiscoverabilitySetupPage(
+                        profile: profile,
+                        onCompleted: () => setState(
+                          () => _locallyCompletedDiscoveryUserIds.add(user.uid),
+                        ),
+                      );
                     }
                     debugPrint(
                       '🔍 BootstrapGate: Profile complete, showing AppShell',

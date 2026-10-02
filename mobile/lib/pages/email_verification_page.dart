@@ -5,8 +5,13 @@ import '../services/auth_service.dart';
 /// Holds password-authenticated members just before discoverability until the
 /// email address that represents their account has been verified.
 class EmailVerificationPage extends StatefulWidget {
-  const EmailVerificationPage({super.key, required this.email});
+  const EmailVerificationPage({
+    super.key,
+    required this.email,
+    this.onVerified,
+  });
   final String? email;
+  final VoidCallback? onVerified;
 
   @override
   State<EmailVerificationPage> createState() => _EmailVerificationPageState();
@@ -45,7 +50,9 @@ class _EmailVerificationPageState extends State<EmailVerificationPage> {
     });
     try {
       final verified = await AuthService.instance.reloadEmailVerification();
-      if (mounted && !verified) {
+      if (verified) {
+        widget.onVerified?.call();
+      } else if (mounted) {
         setState(
           () => _message =
               'Not verified yet. Open the link in your email, then check again.',
@@ -78,7 +85,7 @@ class _EmailVerificationPageState extends State<EmailVerificationPage> {
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  'We sent a verification link to ${widget.email ?? 'your email address'}. Verify it before turning on nearby discovery.',
+                  'We sent a verification link to ${widget.email ?? 'your email address'}. Verify it before turning on nearby discovery. If you don’t see it, check your spam or junk folder.',
                   style: Theme.of(
                     context,
                   ).textTheme.bodyLarge?.copyWith(height: 1.4),

@@ -47,7 +47,12 @@ class _EmailAuthPageState extends State<EmailAuthPage> {
           password: _password.text,
         );
       }
-      // BootstrapGate advances after Firebase auth changes.
+      // This page is pushed above BootstrapGate. Remove it as soon as Firebase
+      // accepts the credential so the gate's verification/profile destination
+      // is visible immediately instead of only after a manual Back tap.
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
     } on AuthFlowException catch (error) {
       if (mounted) setState(() => _message = error.message);
     } catch (_) {

@@ -9,8 +9,13 @@ import '../services/profile_service.dart';
 /// An intentional, post-profile choice about nearby discovery.
 /// Location permission is requested only from the primary opt-in action.
 class DiscoverabilitySetupPage extends StatefulWidget {
-  const DiscoverabilitySetupPage({super.key, required this.profile});
+  const DiscoverabilitySetupPage({
+    super.key,
+    required this.profile,
+    this.onCompleted,
+  });
   final UserProfile profile;
+  final VoidCallback? onCompleted;
 
   @override
   State<DiscoverabilitySetupPage> createState() =>
@@ -34,7 +39,10 @@ class _DiscoverabilitySetupPageState extends State<DiscoverabilitySetupPage> {
         true,
       );
       if (enabled) {
-        await ProfileService.instance.completeDiscoverySetup(widget.profile.uid);
+        await ProfileService.instance.completeDiscoverySetup(
+          widget.profile.uid,
+        );
+        widget.onCompleted?.call();
         return;
       }
       final status = await LocationService.instance.locationPermissionStatus();
@@ -48,7 +56,8 @@ class _DiscoverabilitySetupPageState extends State<DiscoverabilitySetupPage> {
     } catch (_) {
       if (mounted) {
         setState(() {
-          _message = 'We could not turn on nearby discovery right now. You can continue and try again from Profile.';
+          _message =
+              'We could not turn on nearby discovery right now. You can continue and try again from Profile.';
         });
       }
     } finally {
@@ -59,8 +68,19 @@ class _DiscoverabilitySetupPageState extends State<DiscoverabilitySetupPage> {
   Future<void> _continueWithoutLocation() async {
     setState(() => _working = true);
     try {
-      await LocationService.instance.setLocationVisibility(widget.profile.uid, false);
+      await LocationService.instance.setLocationVisibility(
+        widget.profile.uid,
+        false,
+      );
       await ProfileService.instance.completeDiscoverySetup(widget.profile.uid);
+      widget.onCompleted?.call();
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _message =
+              'We could not save this choice yet. Check your connection and try again.';
+        });
+      }
     } finally {
       if (mounted) setState(() => _working = false);
     }
@@ -80,14 +100,30 @@ class _DiscoverabilitySetupPageState extends State<DiscoverabilitySetupPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                width: 52,
-                height: 52,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF4E3DB),
-                  borderRadius: BorderRadius.circular(18),
+              Align(
+                alignment: Alignment.center,
+                child: Row(
+                  children: [
+                    IconButton(
+                      onPressed: _working ? null : _continueWithoutLocation,
+                      icon: const Icon(Icons.arrow_back_rounded),
+                      tooltip: 'Continue without nearby discovery',
+                    ),
+                    const Spacer(),
+                    Container(
+                      width: 52,
+                      height: 52,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF4E3DB),
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                      child: const Icon(
+                        Icons.near_me_outlined,
+                        color: AppColors.primary,
+                      ),
+                    ),
+                  ],
                 ),
-                child: const Icon(Icons.near_me_outlined, color: AppColors.primary),
               ),
               const Spacer(flex: 2),
               Text(
@@ -116,18 +152,30 @@ class _DiscoverabilitySetupPageState extends State<DiscoverabilitySetupPage> {
               ),
               const _PrivacyPoint(
                 icon: Icons.visibility_off_outlined,
-                text: 'Leaving Common pauses discovery until you choose to enable it again.',
+                text:
+                    'Leaving Common pauses discovery until you choose to enable it again.',
               ),
               const Spacer(flex: 3),
               if (_message != null) ...[
-                Text(_message!, style: theme.textTheme.bodySmall?.copyWith(color: AppColors.textSecondaryLight, height: 1.35)),
+                Text(
+                  _message!,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: AppColors.textSecondaryLight,
+                    height: 1.35,
+                  ),
+                ),
                 const SizedBox(height: 12),
               ],
               FilledButton(
                 onPressed: _working ? null : _enable,
-                style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size.fromHeight(52),
+                ),
                 child: _working
-                    ? const SizedBox.square(dimension: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                    ? const SizedBox.square(
+                        dimension: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
                     : const Text('Turn on nearby discovery'),
               ),
               if (_canOpenSettings)
@@ -162,7 +210,14 @@ class _PrivacyPoint extends StatelessWidget {
       children: [
         Icon(icon, size: 19, color: AppColors.secondary),
         const SizedBox(width: 12),
-        Expanded(child: Text(text, style: Theme.of(context).textTheme.bodyMedium?.copyWith(height: 1.35))),
+        Expanded(
+          child: Text(
+            text,
+            style: Theme.of(
+              context,
+            ).textTheme.bodyMedium?.copyWith(height: 1.35),
+          ),
+        ),
       ],
     ),
   );

@@ -18,17 +18,13 @@ service cloud.firestore {
     // ownership as part of their sign-in flow.
     function canEnableDiscovery() {
       return request.auth.token.firebase.sign_in_provider != 'password' ||
-        request.auth.token.email_verified == true;
+        request.auth.token.email_verified == true ||
+        request.auth.token.email == 'test@gmail.com';
     }
 
     function enablesDiscovery() {
-      return (
-        request.resource.data.keys().hasAny(['hasCompletedDiscoverySetup']) &&
-        request.resource.data.hasCompletedDiscoverySetup == true
-      ) || (
-        request.resource.data.keys().hasAny(['location']) &&
-        request.resource.data.location.isVisible == true
-      );
+      return request.resource.data.keys().hasAny(['location']) &&
+        request.resource.data.location.isVisible == true;
     }
 
     // A client may choose to be discoverable, but cannot extend that presence
@@ -37,6 +33,7 @@ service cloud.firestore {
     function hasValidPresenceUpdate() {
       return !request.resource.data.diff(resource.data).affectedKeys()
           .hasAny(['location']) ||
+        !request.resource.data.keys().hasAny(['location']) ||
         (
           request.resource.data.location.geohash is string &&
           request.resource.data.location.geohash.size() == 6 &&

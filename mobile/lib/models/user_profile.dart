@@ -149,6 +149,14 @@ class UserProfile {
       );
     }
 
+    final rawLocation = m['location'];
+    // Older clients could write a visibility-only location map while someone
+    // chose "Not now". Treat that incomplete, non-discoverable state as no
+    // location so one legacy document cannot block the whole profile.
+    final location = rawLocation is Map && rawLocation['geohash'] is String
+        ? UserLocation.fromMap(Map<String, dynamic>.from(rawLocation))
+        : null;
+
     return UserProfile(
       uid: uid,
       displayName: m['displayName'] as String?,
@@ -182,9 +190,7 @@ class UserProfile {
       updatedAt: DateTime.fromMillisecondsSinceEpoch(
         m['updatedAt'] as int? ?? 0,
       ),
-      location: m['location'] != null
-          ? UserLocation.fromMap(m['location'] as Map<String, dynamic>)
-          : null,
+      location: location,
       searchRadiusKm: m['searchRadiusKm'] as double?,
       hasCompletedDiscoverySetup:
           m['hasCompletedDiscoverySetup'] as bool? ?? true,

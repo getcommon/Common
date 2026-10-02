@@ -36,6 +36,11 @@ class AuthService {
   AuthService._();
   static final instance = AuthService._();
 
+  /// The App Review/test account is exempt from inbox verification so reviewers
+  /// can exercise nearby discovery normally. Firestore enforces this same
+  /// narrow exception server-side.
+  static const reviewerTestEmail = 'test@gmail.com';
+
   static const _googleIosClientId =
       '800333772675-c31gm5goii7mkhm53h0kncaibudoctar.apps.googleusercontent.com';
   static const _googleWebClientId =
@@ -140,7 +145,11 @@ class AuthService {
     return false;
   }
 
+  static bool isReviewerTestEmail(String? email) =>
+      email?.trim().toLowerCase() == reviewerTestEmail;
+
   bool requiresEmailVerification(User user) =>
+      !isReviewerTestEmail(user.email) &&
       !user.emailVerified &&
       user.providerData.any((provider) => provider.providerId == 'password');
 

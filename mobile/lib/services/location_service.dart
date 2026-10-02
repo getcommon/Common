@@ -344,13 +344,35 @@ class LocationService {
   /// Permission is requested here rather than during sign-in.
   Future<bool> setLocationVisibility(String uid, bool isVisible) async {
     if (!isVisible) {
-      await _db.collection('users').doc(uid).set({
-        'location': {
-          'isVisible': false,
-          'lastUpdated': FieldValue.serverTimestamp(),
-          'expiresAt': FieldValue.serverTimestamp(),
-        },
-      }, SetOptions(merge: true));
+      final userRef = _db.collection('users').doc(uid);
+      final existing = (await userRef.get()).data()?['location'];
+      final existingLocation = existing is Map
+          ? Map<String, dynamic>.from(existing)
+          : null;
+
+      // A first-time "Not now" should not create an incomplete location map.
+      // If we do have a real location, retain its coarse coordinates so the
+      // profile remains structurally valid while discovery is paused.
+      final hasValidLocation =
+          existingLocation?['geohash'] is String &&
+          existingLocation?['latitude'] is num &&
+          existingLocation?['longitude'] is num;
+      if (!hasValidLocation) {
+        await userRef.set({
+          'location': FieldValue.delete(),
+        }, SetOptions(merge: true));
+      } else {
+        await userRef.set({
+          'location': {
+            'geohash': existingLocation!['geohash'],
+            'latitude': existingLocation['latitude'],
+            'longitude': existingLocation['longitude'],
+            'isVisible': false,
+            'lastUpdated': FieldValue.serverTimestamp(),
+            'expiresAt': FieldValue.serverTimestamp(),
+          },
+        }, SetOptions(merge: true));
+      }
       stopTracking();
       return true;
     }
