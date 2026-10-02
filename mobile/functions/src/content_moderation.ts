@@ -10,10 +10,10 @@ const phonePattern = /(?:\+?\d[\d(). -]{7,}\d)/;
 /// guardrail, not a substitute for member reports and human review.
 export function moderationRejection(text: string): string | null {
   if (blockedPatterns.some((pattern) => pattern.test(text))) {
-    return 'This message may violate Common Grounds safety guidelines.';
+    return 'This message may violate Commons safety guidelines.';
   }
   if (emailPattern.test(text) || phonePattern.test(text)) {
-    return 'Please do not share contact details in Common Grounds messages.';
+    return 'Please do not share contact details in Commons messages.';
   }
   return null;
 }

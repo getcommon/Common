@@ -53,7 +53,7 @@ class MyApp extends StatelessWidget {
     return ValueListenableBuilder<ThemeMode>(
       valueListenable: ThemeController.instance,
       builder: (context, themeMode, child) => MaterialApp(
-        title: 'Common Grounds',
+        title: 'Common',
         debugShowCheckedModeBanner: false,
 
         // Apply custom theme with light/dark mode support
