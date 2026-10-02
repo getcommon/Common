@@ -24,6 +24,7 @@ class _ProfileSetupPageState extends State<ProfileSetupPage> {
   late final TextEditingController _bio;
   late final TextEditingController _customInterest;
   late Set<String> _interests;
+  late Set<String> _topInterests;
   late Set<String> _vibeTags;
   bool _saving = false;
   String? _error;
@@ -56,6 +57,7 @@ class _ProfileSetupPageState extends State<ProfileSetupPage> {
     _bio = TextEditingController(text: widget.profile.bio ?? '');
     _customInterest = TextEditingController();
     _interests = widget.profile.interests.toSet();
+    _topInterests = widget.profile.topInterests.toSet();
     _vibeTags = widget.profile.vibeTags.toSet();
     _profileImageUrl = widget.profile.photoUrl;
     _photoMoments = widget.profile.photoMoments
@@ -296,6 +298,23 @@ class _ProfileSetupPageState extends State<ProfileSetupPage> {
     }
   }
 
+  void _toggleTopInterest(String interest, bool selected) {
+    setState(() {
+      if (selected && _topInterests.length < UserProfile.maximumTopInterests) {
+        _topInterests.add(interest);
+      } else if (!selected) {
+        _topInterests.remove(interest);
+      }
+    });
+  }
+
+  void _removeInterest(String interest) {
+    setState(() {
+      _interests.remove(interest);
+      _topInterests.remove(interest);
+    });
+  }
+
   Future<void> _save() async {
     setState(() {
       _saving = true;
@@ -334,6 +353,10 @@ class _ProfileSetupPageState extends State<ProfileSetupPage> {
         classYear: widget.profile.classYear,
         major: widget.profile.major,
         interests: _interests.toList()..sort(),
+        topInterests: _topInterests
+            .where(_interests.contains)
+            .take(UserProfile.maximumTopInterests)
+            .toList(),
         vibeTags: _vibeTags.toList(),
         createdAt: widget.profile.createdAt,
         updatedAt: DateTime.now(),
@@ -740,8 +763,7 @@ class _ProfileSetupPageState extends State<ProfileSetupPage> {
                     .map(
                       (interest) => InputChip(
                         label: Text(interest),
-                        onPressed: () =>
-                            setState(() => _interests.remove(interest)),
+                        onPressed: () => _removeInterest(interest),
                         selected: true,
                         selectedColor: colors.primaryContainer,
                         showCheckmark: false,
@@ -817,6 +839,7 @@ class _ProfileSetupPageState extends State<ProfileSetupPage> {
                                       _interests.add(interest);
                                     } else {
                                       _interests.remove(interest);
+                                      _topInterests.remove(interest);
                                     }
                                   }),
                                 ),
@@ -827,6 +850,46 @@ class _ProfileSetupPageState extends State<ProfileSetupPage> {
                   ),
                 );
               }),
+              const SizedBox(height: 4),
+              TextButton.icon(
+                icon: const Icon(Icons.add),
+                label: const Text('Add custom interest'),
+                style: TextButton.styleFrom(foregroundColor: AppColors.primary),
+                onPressed: () {
+                  setState(() {
+                    _showCustomInterestField = !_showCustomInterestField;
+                  });
+                },
+              ),
+              if (_showCustomInterestField) ...[
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _customInterest,
+                        decoration: _editorInputDecoration(
+                          context,
+                          'Custom interest',
+                          hintText: 'e.g., Ultimate Frisbee',
+                        ),
+                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                          color: colors.onSurface,
+                        ),
+                        cursorColor: colors.primary,
+                        textCapitalization: TextCapitalization.words,
+                        onSubmitted: (_) => _addCustomInterest(),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton(
+                      icon: const Icon(Icons.check),
+                      onPressed: _addCustomInterest,
+                      tooltip: 'Add',
+                    ),
+                  ],
+                ),
+              ],
             ],
 
             // Show custom interests that don't fit predefined categories
@@ -877,78 +940,94 @@ class _ProfileSetupPageState extends State<ProfileSetupPage> {
                 ),
               ),
 
-            // Keep custom interests available without giving them their own card.
-            TextButton.icon(
-              icon: const Icon(Icons.add),
-              label: const Text('Add custom interest'),
-              style: TextButton.styleFrom(foregroundColor: AppColors.primary),
-              onPressed: () {
-                setState(() {
-                  _showCustomInterestField = !_showCustomInterestField;
-                });
-              },
-            ),
-            // Custom interest input field
-            if (_showCustomInterestField) ...[
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _customInterest,
-                      decoration: _editorInputDecoration(
-                        context,
-                        'Custom interest',
-                        hintText: 'e.g., Ultimate Frisbee',
-                      ),
-                      style: Theme.of(
-                        context,
-                      ).textTheme.bodyLarge?.copyWith(color: colors.onSurface),
-                      cursorColor: colors.primary,
-                      textCapitalization: TextCapitalization.words,
-                      onSubmitted: (_) => _addCustomInterest(),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  IconButton(
-                    icon: const Icon(Icons.check),
-                    onPressed: _addCustomInterest,
-                    tooltip: 'Add',
-                  ),
-                ],
+            if (_interests.isNotEmpty) ...[
+              const SizedBox(height: 20),
+              const _EditorialLabel('Your top interests'),
+              const SizedBox(height: 7),
+              Text(
+                'Pick up to 3 interests you feel most drawn to. Shared picks are highlighted when someone appears in Discover.',
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: colors.onSurfaceVariant),
               ),
+              const SizedBox(height: 11),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: _interests.map((interest) {
+                  final selected = _topInterests.contains(interest);
+                  final canSelect =
+                      selected ||
+                      _topInterests.length < UserProfile.maximumTopInterests;
+                  return FilterChip(
+                    label: Text(interest),
+                    selected: selected,
+                    showCheckmark: false,
+                    selectedColor: AppColors.topInterestGoldLight,
+                    side: BorderSide(
+                      color: selected
+                          ? AppColors.topInterestGold
+                          : Colors.transparent,
+                    ),
+                    shape: const StadiumBorder(),
+                    labelStyle: TextStyle(
+                      color: selected
+                          ? AppColors.topInterestGoldDark
+                          : colors.onSurface,
+                      fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                    ),
+                    onSelected: canSelect
+                        ? (value) => _toggleTopInterest(interest, value)
+                        : null,
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 5),
+              Text(
+                '${_topInterests.length} of ${UserProfile.maximumTopInterests} selected',
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: colors.onSurfaceVariant),
+              ),
+              const SizedBox(height: 8),
             ],
+
             const SizedBox(height: 22),
             const Divider(height: 1),
             const SizedBox(height: 22),
 
-            // Optional context follows the same quiet, text-first structure
-            // as interests rather than introducing a separate visual system.
-            Row(
-              children: [
-                const _EditorialLabel('A little more context'),
-                const Spacer(),
-                Text(
-                  _vibeTags.isEmpty
-                      ? 'Optional'
-                      : '${_vibeTags.length} selected',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: colors.onSurfaceVariant,
+            Semantics(
+              button: true,
+              expanded: _showVibeTags,
+              label: 'Personality, ${_vibeTags.length} selected',
+              child: InkWell(
+                borderRadius: BorderRadius.circular(8),
+                onTap: () => setState(() => _showVibeTags = !_showVibeTags),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  child: Row(
+                    children: [
+                      const _EditorialLabel('Personality'),
+                      const Spacer(),
+                      Text(
+                        _vibeTags.isEmpty
+                            ? 'Optional'
+                            : '${_vibeTags.length} selected',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: colors.onSurfaceVariant,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Icon(
+                        _showVibeTags
+                            ? Icons.keyboard_arrow_up_rounded
+                            : Icons.keyboard_arrow_down_rounded,
+                        color: colors.onSurfaceVariant,
+                      ),
+                    ],
                   ),
                 ),
-              ],
-            ),
-            const SizedBox(height: 7),
-            TextButton.icon(
-              icon: Icon(
-                _showVibeTags
-                    ? Icons.keyboard_arrow_up_rounded
-                    : Icons.add_rounded,
-                size: 18,
               ),
-              label: Text(_showVibeTags ? 'Hide context' : 'Add context'),
-              style: TextButton.styleFrom(foregroundColor: colors.primary),
-              onPressed: () => setState(() => _showVibeTags = !_showVibeTags),
             ),
             if (_showVibeTags)
               Padding(
@@ -982,7 +1061,7 @@ class _ProfileSetupPageState extends State<ProfileSetupPage> {
                               children: tags.map((tag) {
                                 final isSelected = _vibeTags.contains(tag.id);
                                 return FilterChip(
-                                  label: Text(tag.displayText),
+                                  label: Text(tag.label),
                                   selected: isSelected,
                                   showCheckmark: false,
                                   selectedColor: colors.primaryContainer,

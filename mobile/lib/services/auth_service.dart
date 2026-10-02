@@ -66,6 +66,113 @@ class AuthService {
     return u == null ? null : AppUser.fromFirebaseUser(u);
   }
 
+  /// Creates an email/password account and immediately sends its verification
+  /// email. Firebase rejects duplicate emails, including emails already used by
+  /// a Google or Apple account, so this cannot create a second Common Grounds
+  /// profile for the same address.
+  Future<AppUser> createAccountWithEmail({
+    required String email,
+    required String password,
+  }) async {
+    try {
+      final credential = await _auth.createUserWithEmailAndPassword(
+        email: email.trim(),
+        password: password,
+      );
+      final user = credential.user;
+      if (user == null) {
+        throw const AuthFlowException('Account creation failed.');
+      }
+      await user.sendEmailVerification();
+      await FirebaseFirestore.instance.enableNetwork();
+      return AppUser.fromFirebaseUser(user);
+    } on FirebaseAuthException catch (error) {
+      throw AuthFlowException.fromFirebase(error);
+    }
+  }
+
+  /// Signs in with an existing email/password credential.
+  Future<AppUser> signInWithEmail({
+    required String email,
+    required String password,
+  }) async {
+    try {
+      final credential = await _auth.signInWithEmailAndPassword(
+        email: email.trim(),
+        password: password,
+      );
+      final user = credential.user;
+      if (user == null) throw const AuthFlowException('Sign-in failed.');
+      await FirebaseFirestore.instance.enableNetwork();
+      return AppUser.fromFirebaseUser(user);
+    } on FirebaseAuthException catch (error) {
+      throw AuthFlowException.fromFirebase(error);
+    }
+  }
+
+  Future<void> sendPasswordResetEmail(String email) async {
+    try {
+      await _auth.sendPasswordResetEmail(email: email.trim());
+    } on FirebaseAuthException catch (error) {
+      throw AuthFlowException.fromFirebase(error);
+    }
+  }
+
+  Future<void> resendEmailVerification() async {
+    final user = _auth.currentUser;
+    if (user == null) throw const AuthFlowException('Please sign in again.');
+    await user.sendEmailVerification();
+  }
+
+  /// Refreshes Firebase's verification state after the member returns from
+  /// their inbox. `userChanges` in BootstrapGate then advances the app.
+  Future<bool> reloadEmailVerification() async {
+    final user = _auth.currentUser;
+    if (user == null) return false;
+    await user.reload();
+    final refreshedUser = _auth.currentUser;
+    if (refreshedUser?.emailVerified == true) {
+      // Firestore rules use the ID-token email_verified claim. Refresh it now
+      // so the member can immediately continue to discovery.
+      await refreshedUser!.getIdToken(true);
+      return true;
+    }
+    return false;
+  }
+
+  bool requiresEmailVerification(User user) =>
+      !user.emailVerified &&
+      user.providerData.any((provider) => provider.providerId == 'password');
+
+  bool get canAddEmailPassword =>
+      _auth.currentUser != null &&
+      !_auth.currentUser!.providerData.any(
+        (provider) => provider.providerId == 'password',
+      );
+
+  /// Lets a member who began with Google or Apple add email sign-in to that
+  /// *same* Firebase user. This is the supported account-linking path rather
+  /// than creating another profile for the same person.
+  Future<void> addEmailPassword({
+    required String email,
+    required String password,
+  }) async {
+    final user = _auth.currentUser;
+    if (user == null) throw const AuthFlowException('Please sign in again.');
+    if (user.email?.toLowerCase() != email.trim().toLowerCase()) {
+      throw const AuthFlowException(
+        'Use the email already associated with this Common Grounds account.',
+      );
+    }
+    try {
+      await user.linkWithCredential(
+        EmailAuthProvider.credential(email: email.trim(), password: password),
+      );
+    } on FirebaseAuthException catch (error) {
+      throw AuthFlowException.fromFirebase(error);
+    }
+  }
+
   /// Google sign-in using the v7 flow.
   Future<AppUser> signInWithGoogle() async {
     // Ensure plugin is ready (safe to call multiple times)
@@ -197,4 +304,49 @@ class AuthService {
         .call<void>({'confirm': true});
     await signOut();
   }
+}
+
+/// User-facing auth errors. Keep Firebase's implementation details out of UI
+/// and point people with an existing social account back to its sign-in button.
+class AuthFlowException implements Exception {
+  const AuthFlowException(this.message);
+  final String message;
+
+  factory AuthFlowException.fromFirebase(FirebaseAuthException error) {
+    switch (error.code) {
+      case 'email-already-in-use':
+        return const AuthFlowException(
+          'An account already uses this email. Sign in with the method you used before, then add a password from your account settings.',
+        );
+      case 'account-exists-with-different-credential':
+        return const AuthFlowException(
+          'This email is already connected to another sign-in method. Use that method to sign in.',
+        );
+      case 'invalid-email':
+        return const AuthFlowException('Enter a valid email address.');
+      case 'weak-password':
+        return const AuthFlowException(
+          'Use a stronger password with at least 8 characters.',
+        );
+      case 'user-not-found':
+      case 'wrong-password':
+      case 'invalid-credential':
+        return const AuthFlowException('That email or password is incorrect.');
+      case 'too-many-requests':
+        return const AuthFlowException(
+          'Too many attempts. Please wait a moment and try again.',
+        );
+      case 'requires-recent-login':
+        return const AuthFlowException(
+          'For security, sign in again before adding a password.',
+        );
+      default:
+        return AuthFlowException(
+          error.message ?? 'Something went wrong. Please try again.',
+        );
+    }
+  }
+
+  @override
+  String toString() => message;
 }

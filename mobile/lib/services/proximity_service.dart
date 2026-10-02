@@ -99,6 +99,8 @@ class ProximityService {
         distanceKm: (match['distanceKm'] as num).toDouble(),
         commonInterests:
             (match['commonInterests'] as List?)?.cast<String>() ?? const [],
+        topSharedInterests:
+            (match['topSharedInterests'] as List?)?.cast<String>() ?? const [],
         matchScore: (match['matchScore'] as num).toDouble(),
       );
     }).toList();
@@ -126,8 +128,14 @@ class ProximityMatch {
     required this.userProfile,
     required this.distanceKm,
     required this.commonInterests,
+    List<String>? topSharedInterests,
     required this.matchScore,
-  });
+  }) : _topSharedInterests = topSharedInterests;
+
+  // Matches can outlive a hot reload and callable payloads from an earlier
+  // deploy may not include this optional ranking detail.
+  final List<String>? _topSharedInterests;
+  List<String> get topSharedInterests => _topSharedInterests ?? const [];
 
   /// Get formatted distance string
   String get formattedDistance {

@@ -41,6 +41,7 @@ interface UserProfile {
   classYear?: string;
   major?: string;
   interests: string[];
+  topInterests?: string[];
   vibeTags?: string[];
   createdAt: admin.firestore.Timestamp;
   updatedAt: admin.firestore.Timestamp;
@@ -56,6 +57,7 @@ interface ProximityMatch {
   userProfile: PublicDiscoverProfile;
   distanceKm: number;
   commonInterests: string[];
+  topSharedInterests: string[];
   matchScore: number;
 }
 
@@ -636,6 +638,7 @@ export const findNearbyMatches = onCall(
             // or the underlying location document.
             distanceKm: coarseDistanceKm,
             commonInterests: eligibility.commonInterests,
+            topSharedInterests: eligibility.topSharedInterests,
             matchScore: eligibility.matchScore
           });
 

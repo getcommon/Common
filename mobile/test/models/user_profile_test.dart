@@ -19,7 +19,14 @@ void main() {
         'bio': 'Hello world',
         'classYear': '2026',
         'major': 'Computer Science',
-        'interests': ['Coding', 'Gaming', 'Music'],
+        'interests': ['Coding', 'Gaming', 'Music', 'Reading'],
+        'topInterests': [
+          'Gaming',
+          'Music',
+          'Reading',
+          'Coding',
+          'Not selected',
+        ],
         'vibeTags': ['Night Owl', 'Introvert'],
         'createdAt': 1700000000000,
         'updatedAt': 1700000000000,
@@ -37,7 +44,8 @@ void main() {
       expect(profile.bio, 'Hello world');
       expect(profile.classYear, '2026');
       expect(profile.major, 'Computer Science');
-      expect(profile.interests, ['Coding', 'Gaming', 'Music']);
+      expect(profile.interests, ['Coding', 'Gaming', 'Music', 'Reading']);
+      expect(profile.topInterests, ['Gaming', 'Music', 'Reading']);
       expect(profile.vibeTags, ['Night Owl', 'Introvert']);
       expect(profile.searchRadiusKm, 5.0);
     });
@@ -110,6 +118,7 @@ void main() {
         uid: 'user1',
         displayName: 'Alice',
         interests: ['Coding'],
+        topInterests: ['Coding'],
         vibeTags: ['Night Owl'],
         createdAt: now,
         updatedAt: now,
@@ -121,6 +130,7 @@ void main() {
       expect(restored.uid, original.uid);
       expect(restored.displayName, original.displayName);
       expect(restored.interests, original.interests);
+      expect(restored.topInterests, original.topInterests);
       expect(restored.vibeTags, original.vibeTags);
       expect(
         restored.hasCompletedDiscoverySetup,

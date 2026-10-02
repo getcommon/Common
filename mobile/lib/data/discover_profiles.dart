@@ -9,13 +9,19 @@ class DiscoverProfile {
     this.age,
     required this.distanceLabel,
     required this.sharedInterests,
+    List<String>? topSharedInterests,
     required this.compatibilityLabel,
-  });
+  }) : _topSharedInterests = topSharedInterests;
 
   final UserProfile profile;
   final int? age;
   final String distanceLabel;
   final List<String> sharedInterests;
+  // A hot-reloaded app can still hold a profile created before this field
+  // existed, and older callable payloads may omit it. Never let either case
+  // take down Discover.
+  final List<String>? _topSharedInterests;
+  List<String> get topSharedInterests => _topSharedInterests ?? const [];
   final String compatibilityLabel;
 
   /// Shapes an eligible server-side match for the public profile presentation.
@@ -25,6 +31,7 @@ class DiscoverProfile {
       profile: match.userProfile,
       distanceLabel: _coarseDistanceLabel(match.distanceKm),
       sharedInterests: match.commonInterests,
+      topSharedInterests: match.topSharedInterests,
       compatibilityLabel: interestCount == 1
           ? 'You share an interest'
           : 'You share $interestCount interests',

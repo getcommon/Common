@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../core/theme/app_colors.dart';
 import '../services/auth_service.dart';
+import 'email_auth_page.dart';
 
 /// The signed-out front door. Authentication stays here so the bootstrap gate
 /// can continue to react to authStateChanges without navigation work in the UI.
@@ -170,8 +171,7 @@ class _WelcomePageState extends State<WelcomePage>
                           onPressed: _signingInProvider == null
                               ? _handleGoogleSignIn
                               : null,
-                          loading:
-                              _signingInProvider == _SignInProvider.google,
+                          loading: _signingInProvider == _SignInProvider.google,
                           icon: const FaIcon(FontAwesomeIcons.google, size: 18),
                           label: 'Continue with Google',
                           backgroundColor: isDark
@@ -204,17 +204,51 @@ class _WelcomePageState extends State<WelcomePage>
                             borderColor: Colors.transparent,
                           ),
                         ],
+                        const SizedBox(height: 18),
+                        Row(
+                          children: [
+                            const Expanded(child: Divider()),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                              ),
+                              child: Text(
+                                'or',
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                            ),
+                            const Expanded(child: Divider()),
+                          ],
+                        ),
+                        const SizedBox(height: 18),
+                        _AuthButton(
+                          onPressed: _signingInProvider == null
+                              ? () => Navigator.of(context).push(
+                                  MaterialPageRoute<void>(
+                                    builder: (_) => const EmailAuthPage(),
+                                  ),
+                                )
+                              : null,
+                          loading: false,
+                          icon: const Icon(Icons.email_outlined, size: 20),
+                          label: 'Continue with email',
+                          backgroundColor: isDark
+                              ? AppColors.surfaceDark
+                              : AppColors.surfaceLight,
+                          foregroundColor: colors.onSurface,
+                          borderColor: isDark
+                              ? AppColors.borderDark
+                              : AppColors.borderLight,
+                        ),
                         const SizedBox(height: 20),
                         _TermsAndPrivacy(
                           isDark: isDark,
-                          onTermsTap: () =>
-                              _launchUrl(
-                                'https://blue4-commongrounds.web.app/terms.html',
-                              ),
-                          onPrivacyTap: () =>
-                              _launchUrl(
-                                'https://blue4-commongrounds.web.app/privacy.html',
-                              ),
+                          onTermsTap: () => _launchUrl(
+                            'https://blue4-commongrounds.web.app/terms.html',
+                          ),
+                          onPrivacyTap: () => _launchUrl(
+                            'https://blue4-commongrounds.web.app/privacy.html',
+                          ),
                         ),
                       ],
                     ),

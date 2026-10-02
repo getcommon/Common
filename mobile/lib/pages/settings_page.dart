@@ -96,6 +96,19 @@ class SettingsPage extends StatelessWidget {
               const SizedBox(height: 38),
               const _SettingsHeading('Account'),
               const SizedBox(height: 10),
+              if (AuthService.instance.canAddEmailPassword)
+                TextButton.icon(
+                  onPressed: () => _addEmailPassword(context),
+                  icon: const Icon(Icons.password_outlined, size: 18),
+                  label: const Text('Add email and password'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: Theme.of(context).colorScheme.onSurface,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 4,
+                      vertical: 12,
+                    ),
+                  ),
+                ),
               TextButton.icon(
                 onPressed: () => _confirmSignOut(context),
                 icon: const Icon(Icons.logout_rounded, size: 18),
@@ -154,6 +167,114 @@ class SettingsPage extends StatelessWidget {
       // replaces the shell, otherwise this route stays visible over login.
       navigator.pop();
       await AuthService.instance.signOut();
+    }
+  }
+
+  Future<void> _addEmailPassword(BuildContext context) async {
+    final email = TextEditingController(
+      text: AuthService.instance.currentUser?.email ?? '',
+    );
+    final password = TextEditingController();
+    final confirmation = TextEditingController();
+    String? error;
+    bool saving = false;
+    final linked = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Add email sign-in'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'This adds a password to your existing account. Use the email shown below.',
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                controller: email,
+                keyboardType: TextInputType.emailAddress,
+                decoration: const InputDecoration(labelText: 'Email address'),
+              ),
+              TextField(
+                controller: password,
+                obscureText: true,
+                decoration: const InputDecoration(labelText: 'New password'),
+              ),
+              TextField(
+                controller: confirmation,
+                obscureText: true,
+                decoration: const InputDecoration(
+                  labelText: 'Confirm password',
+                ),
+              ),
+              if (error != null) ...[
+                const SizedBox(height: 10),
+                Text(
+                  error!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: saving
+                  ? null
+                  : () => Navigator.pop(dialogContext, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: saving
+                  ? null
+                  : () async {
+                      if (password.text.length < 8) {
+                        setDialogState(
+                          () => error = 'Use at least 8 characters.',
+                        );
+                        return;
+                      }
+                      if (password.text != confirmation.text) {
+                        setDialogState(() => error = 'Passwords do not match.');
+                        return;
+                      }
+                      setDialogState(() {
+                        saving = true;
+                        error = null;
+                      });
+                      try {
+                        await AuthService.instance.addEmailPassword(
+                          email: email.text,
+                          password: password.text,
+                        );
+                        if (dialogContext.mounted) {
+                          Navigator.pop(dialogContext, true);
+                        }
+                      } on AuthFlowException catch (exception) {
+                        setDialogState(() => error = exception.message);
+                      } finally {
+                        if (dialogContext.mounted) {
+                          setDialogState(() => saving = false);
+                        }
+                      }
+                    },
+              child: saving
+                  ? const SizedBox.square(
+                      dimension: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('Add password'),
+            ),
+          ],
+        ),
+      ),
+    );
+    email.dispose();
+    password.dispose();
+    confirmation.dispose();
+    if (linked == true && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Email sign-in added to this account.')),
+      );
     }
   }
 

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 // App imports
 import 'app_shell.dart';
@@ -12,6 +13,7 @@ import 'services/profile_service.dart';
 import 'models/user_profile.dart';
 import 'pages/profile_setup_page.dart';
 import 'pages/discoverability_setup_page.dart';
+import 'pages/email_verification_page.dart';
 import 'services/messaging_service.dart';
 import 'services/location_service.dart';
 import 'services/local_prefs.dart';
@@ -132,6 +134,13 @@ class _BootstrapGateState extends State<BootstrapGate>
     _activeUserId = uid;
     debugPrint('🔍 _initUserServices: Starting for uid=$uid');
 
+    // Sign-out intentionally disables Firestore before credentials are
+    // removed. When Firebase restores a persisted session (including after a
+    // hot restart), no provider sign-in method runs to turn it back on.
+    // Restore the connection before reading/creating the profile or storing
+    // an FCM token.
+    await FirebaseFirestore.instance.enableNetwork();
+
     // Google and Apple sign-in can create an Auth user before Firestore has a
     // profile document. Ensure the profile flow always has a document to
     // watch, rather than falling back to a standalone login screen.
@@ -173,7 +182,9 @@ class _BootstrapGateState extends State<BootstrapGate>
           );
         }
         return StreamBuilder<User?>(
-          stream: FirebaseAuth.instance.authStateChanges(),
+          // `userChanges` also fires after email verification is reloaded,
+          // allowing the verification screen to advance without manual routing.
+          stream: FirebaseAuth.instance.userChanges(),
           builder: (context, authSnap) {
             debugPrint(
               '🔍 BootstrapGate: Auth connection state = ${authSnap.connectionState}',
@@ -303,6 +314,9 @@ class _BootstrapGateState extends State<BootstrapGate>
                               updatedAt: DateTime.now(),
                             ),
                       );
+                    }
+                    if (AuthService.instance.requiresEmailVerification(user)) {
+                      return EmailVerificationPage(email: user.email);
                     }
                     if (!profile.hasCompletedDiscoverySetup) {
                       return DiscoverabilitySetupPage(profile: profile);

@@ -21,6 +21,7 @@ export interface DiscoverySafety {
 
 export interface DiscoveryProfile {
   interests?: string[];
+  topInterests?: string[];
   vibeTags?: string[];
   location?: DiscoveryLocation;
   searchRadiusKm?: number;
@@ -30,6 +31,7 @@ export interface DiscoveryProfile {
 export interface DiscoveryEligibility {
   distanceKm: number;
   commonInterests: string[];
+  topSharedInterests: string[];
   matchScore: number;
   rankingVersion: string;
 }
@@ -76,6 +78,16 @@ export function calculateDistanceKm(
 export function commonInterests(first: string[], second: string[]): string[] {
   const firstInterests = new Set(first);
   return second.filter((interest) => firstInterests.has(interest));
+}
+
+/** Interests the pair shares that either member has marked as a top interest. */
+export function topSharedInterests(
+  sharedInterests: string[],
+  viewerTopInterests: readonly string[] = [],
+  candidateTopInterests: readonly string[] = [],
+): string[] {
+  const prioritized = new Set([...viewerTopInterests, ...candidateTopInterests]);
+  return sharedInterests.filter((interest) => prioritized.has(interest));
 }
 
 export function meetsDistanceAwareThreshold(distanceKm: number, matchScore: number): boolean {
@@ -131,11 +143,14 @@ export function discoveryEligibility(
     candidateVibeTags: candidate.vibeTags,
     distanceKm,
   });
-  if (!meetsDistanceAwareThreshold(distanceKm, matchScore)) return null;
-
   return {
     distanceKm,
     commonInterests: sharedInterests,
+    topSharedInterests: topSharedInterests(
+      sharedInterests,
+      viewer.topInterests,
+      candidate.topInterests,
+    ),
     matchScore,
     rankingVersion: discoveryRankingVersion,
   };

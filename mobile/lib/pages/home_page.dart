@@ -398,6 +398,7 @@ class _PublicProfile extends StatelessWidget {
         _SharedContext(
           label: profile.compatibilityLabel,
           interests: profile.sharedInterests,
+          topInterests: profile.topSharedInterests,
         ),
         const SizedBox(height: 21),
         Text(
@@ -489,20 +490,29 @@ class _ProfilePhoto extends StatelessWidget {
   Widget build(BuildContext context) {
     final imageUrl = profile.profile.discoverPhotoUrl;
     if (imageUrl == null || imageUrl.isEmpty) {
-      return Image.asset(
-        'assets/images/eren_editorial_portrait.png',
-        fit: BoxFit.cover,
-      );
+      return const _DiscoverPhotoFallback();
     }
     return Image.network(
       imageUrl,
       fit: BoxFit.cover,
-      errorBuilder: (_, error, stackTrace) => Image.asset(
-        'assets/images/eren_editorial_portrait.png',
-        fit: BoxFit.cover,
-      ),
+      // A Storage URL can take a moment to resolve on a newly installed
+      // device. Keep the Discover card intentional while it loads instead of
+      // exposing the platform's blank gray image placeholder.
+      loadingBuilder: (context, child, loadingProgress) =>
+          loadingProgress == null ? child : const _DiscoverPhotoFallback(),
+      errorBuilder: (_, _, _) => const _DiscoverPhotoFallback(),
     );
   }
+}
+
+class _DiscoverPhotoFallback extends StatelessWidget {
+  const _DiscoverPhotoFallback();
+
+  @override
+  Widget build(BuildContext context) => Image.asset(
+    'assets/images/eren_editorial_portrait.png',
+    fit: BoxFit.cover,
+  );
 }
 
 class _DiscoverLoading extends StatelessWidget {
@@ -551,9 +561,14 @@ class _DiscoverState extends StatelessWidget {
 }
 
 class _SharedContext extends StatelessWidget {
-  const _SharedContext({required this.label, required this.interests});
+  const _SharedContext({
+    required this.label,
+    required this.interests,
+    required this.topInterests,
+  });
   final String label;
   final List<String> interests;
+  final List<String> topInterests;
 
   @override
   Widget build(BuildContext context) {
@@ -580,6 +595,38 @@ class _SharedContext extends StatelessWidget {
               color: AppColors.textSecondaryLight,
             ),
           ),
+          if (topInterests.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                color: AppColors.topInterestGoldLight,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppColors.topInterestGold),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.auto_awesome_rounded,
+                    size: 16,
+                    color: AppColors.topInterestGoldDark,
+                  ),
+                  const SizedBox(width: 7),
+                  Expanded(
+                    child: Text(
+                      topInterests.length == 1
+                          ? '${topInterests.single} is a top shared interest.'
+                          : '${topInterests.join(', ')} are top shared interests.',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: AppColors.topInterestGoldDark,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );

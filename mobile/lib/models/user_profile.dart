@@ -5,6 +5,8 @@ import 'package:mobile/constants/vibe_tags.dart';
 import 'package:mobile/utils/interest_utils.dart';
 
 class UserProfile {
+  static const int maximumTopInterests = 3;
+
   final String uid;
   final String? displayName;
   final String? photoUrl;
@@ -19,6 +21,9 @@ class UserProfile {
   final String? classYear; // e.g., "2026"
   final String? major; // e.g., "CS"
   final List<String> interests;
+
+  /// Up to three interests a member wants prioritized in Discovery context.
+  final List<String> topInterests;
   final List<String> vibeTags; // Personality/vibe tags for better matching
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -38,6 +43,7 @@ class UserProfile {
     this.classYear,
     this.major,
     this.interests = const [],
+    this.topInterests = const [],
     this.vibeTags = const [],
     required this.createdAt,
     required this.updatedAt,
@@ -123,6 +129,10 @@ class UserProfile {
     'classYear': classYear,
     'major': major,
     'interests': interests,
+    'topInterests': topInterests
+        .where(interests.contains)
+        .take(maximumTopInterests)
+        .toList(),
     'vibeTags': vibeTags,
     'createdAt': createdAt.millisecondsSinceEpoch,
     'updatedAt': updatedAt.millisecondsSinceEpoch,
@@ -156,6 +166,15 @@ class UserProfile {
       classYear: m['classYear'] as String?,
       major: m['major'] as String?,
       interests: (m['interests'] as List?)?.cast<String>() ?? const [],
+      topInterests: (m['topInterests'] as List? ?? const [])
+          .whereType<String>()
+          .where(
+            (interest) => (m['interests'] as List? ?? const [])
+                .whereType<String>()
+                .contains(interest),
+          )
+          .take(maximumTopInterests)
+          .toList(),
       vibeTags: (m['vibeTags'] as List?)?.cast<String>() ?? const [],
       createdAt: DateTime.fromMillisecondsSinceEpoch(
         m['createdAt'] as int? ?? 0,

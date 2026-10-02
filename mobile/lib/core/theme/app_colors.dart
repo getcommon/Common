@@ -24,6 +24,11 @@ class AppColors {
   static const Color secondaryLight = Color(0xFFE8C9BB);
   static const Color secondaryDark = Color(0xFF714536);
 
+  /// Reserved for the few interests a member intentionally prioritizes.
+  static const Color topInterestGold = Color(0xFFC58A18);
+  static const Color topInterestGoldLight = Color(0xFFFFE8A6);
+  static const Color topInterestGoldDark = Color(0xFF765000);
+
   // ===========================
   // NEUTRAL COLORS
   // ===========================

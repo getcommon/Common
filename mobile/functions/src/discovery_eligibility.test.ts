@@ -41,6 +41,43 @@ test('accepts a fresh, nearby member with meaningful common ground', () => {
   assert.deepEqual(eligibility.commonInterests, ['Coffee', 'Hiking']);
 });
 
+test('accepts nearby members with one shared interest and ranks them by score', () => {
+  const candidate = profile({
+    interests: ['Coffee', 'Movies', 'Travel'],
+    location: {
+      isVisible: true,
+      lastUpdated: now - 60_000,
+      expiresAt: now + 9 * 60_000,
+      latitude: 38.0304,
+      longitude: -78.51,
+    },
+  });
+
+  const eligibility = discoveryEligibility(profile(), 'viewer', candidate, 'candidate', now);
+
+  assert.ok(eligibility);
+  assert.deepEqual(eligibility.commonInterests, ['Coffee']);
+});
+
+test('returns shared interests either member has marked as a top interest', () => {
+  const viewer = profile({ topInterests: ['Coffee'] });
+  const candidate = profile({
+    topInterests: ['Hiking'],
+    location: {
+      isVisible: true,
+      lastUpdated: now - 60_000,
+      expiresAt: now + 9 * 60_000,
+      latitude: 38.0304,
+      longitude: -78.51,
+    },
+  });
+
+  const eligibility = discoveryEligibility(viewer, 'viewer', candidate, 'candidate', now);
+
+  assert.ok(eligibility);
+  assert.deepEqual(eligibility.topSharedInterests, ['Coffee', 'Hiking']);
+});
+
 test('rejects stale, out-of-radius, incompatible, and safety-excluded members', () => {
   const viewer = profile();
   assert.equal(

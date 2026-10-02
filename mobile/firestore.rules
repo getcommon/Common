@@ -13,6 +13,24 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == userId;
     }
 
+    // Password accounts must verify the inbox they control before their
+    // profile can become discoverable. OAuth providers already verify email
+    // ownership as part of their sign-in flow.
+    function canEnableDiscovery() {
+      return request.auth.token.firebase.sign_in_provider != 'password' ||
+        request.auth.token.email_verified == true;
+    }
+
+    function enablesDiscovery() {
+      return (
+        request.resource.data.keys().hasAny(['hasCompletedDiscoverySetup']) &&
+        request.resource.data.hasCompletedDiscoverySetup == true
+      ) || (
+        request.resource.data.keys().hasAny(['location']) &&
+        request.resource.data.location.isVisible == true
+      );
+    }
+
     // A client may choose to be discoverable, but cannot extend that presence
     // indefinitely with a forged timestamp. Server timestamp transforms
     // resolve to request.time in rules.
@@ -72,8 +90,10 @@ service cloud.firestore {
 
       // Owners can update their profile, while presence timestamps remain
       // bounded and server-authenticated for matching.
-      allow create: if isOwner(userId) && hasValidNewPresence();
-      allow update: if isOwner(userId) && hasValidPresenceUpdate();
+      allow create: if isOwner(userId) && hasValidNewPresence() &&
+        (!enablesDiscovery() || canEnableDiscovery());
+      allow update: if isOwner(userId) && hasValidPresenceUpdate() &&
+        (!enablesDiscovery() || canEnableDiscovery());
       allow delete: if isOwner(userId);
     }
 
